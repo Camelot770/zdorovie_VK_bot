@@ -1,0 +1,47 @@
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import bridge from "@vkontakte/vk-bridge";
+import Layout from "./components/Layout";
+import MainPage from "./pages/MainPage";
+import DoctorsPage from "./pages/DoctorsPage";
+import SlotsPage from "./pages/SlotsPage";
+import ConfirmPage from "./pages/ConfirmPage";
+import SuccessPage from "./pages/SuccessPage";
+import MyRecordsPage from "./pages/MyRecordsPage";
+import CancelPage from "./pages/CancelPage";
+import ProfilePage from "./pages/ProfilePage";
+import BookingWizardPage from "./pages/BookingWizardPage";
+
+export default function App() {
+  useEffect(() => {
+    // Signal VK that the mini-app is ready
+    bridge.send("VKWebAppInit").catch(() => {
+      // Running outside VK (browser dev) — ignore
+    });
+
+    // Fallback: save userId from URL params (for direct links / dev)
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("userId") || params.get("vk_user_id");
+    if (userId) {
+      localStorage.setItem("vk_user_id", userId);
+    }
+  }, []);
+
+  return (
+    <BrowserRouter>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<MainPage />} />
+          <Route path="/booking" element={<BookingWizardPage />} />
+          <Route path="/doctors" element={<DoctorsPage />} />
+          <Route path="/slots/:doctorId" element={<SlotsPage />} />
+          <Route path="/confirm" element={<ConfirmPage />} />
+          <Route path="/success" element={<SuccessPage />} />
+          <Route path="/records" element={<MyRecordsPage />} />
+          <Route path="/cancel/:recordId" element={<CancelPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+        </Routes>
+      </Layout>
+    </BrowserRouter>
+  );
+}

@@ -17,7 +17,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useFavoritesStore } from "../store/favorites";
 import { useBookingStore } from "../store/booking";
 import { api } from "../api/client";
-import { getVkUserInfo } from "../services/vkBridge";
+import { getVkUserInfo, requestPhoneNumber } from "../services/vkBridge";
 import { useEffect } from "react";
 import PageTransition from "../components/ui/PageTransition";
 import Avatar from "../components/ui/Avatar";
@@ -113,6 +113,41 @@ export default function ProfilePage() {
       setLinkStep("code");
     } catch (err) {
       setError(friendlyError(err, "Не удалось отправить SMS. Попробуйте позже."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /**
+   * Get user's phone via VK Bridge (VKWebAppGetPhoneNumber).
+   * VK shows a native confirmation dialog. If user grants — phone is returned
+   * already verified by VK, no SMS code needed.
+   */
+  async function handleVkBridgePhone() {
+    if (!vkUserId) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const phoneDigits = await requestPhoneNumber();
+      if (!phoneDigits) {
+        setError("Вы отклонили доступ к номеру или у вас не подтверждён номер во ВКонтакте.");
+        setSubmitting(false);
+        return;
+      }
+      const result = await api.vkPhoneLink(phoneDigits, vkUserId);
+      if (result.status === "linked" && result.patientId) {
+        setPatientId(result.patientId, result.fullName || "");
+        setLinkStep("done");
+      } else if (result.status === "multiple" && result.patients) {
+        setFoundPatients(result.patients);
+        setLinkStep("pick");
+      } else {
+        setError(
+          "Пациент с таким номером не найден в клинике. Обратитесь в регистратуру или попробуйте другой способ.",
+        );
+      }
+    } catch (err) {
+      setError(friendlyError(err, "Не удалось получить номер через ВКонтакте."));
     } finally {
       setSubmitting(false);
     }
@@ -311,44 +346,66 @@ export default function ProfilePage() {
 
         {/* Step 1: enter phone */}
         {!patientId && linkStep === "phone" && (
-          <div className="bg-white rounded-2xl p-4 shadow-card border border-gray-100 space-y-3">
+          <div className="bg-white rounded-2xl p-4 shadow-card border border-gray-100 space-y-4">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0">
                 <Shield className="w-4 h-4 text-primary-600" />
               </div>
               <div>
                 <h3 className="font-semibold text-gray-900 text-sm">Привязка к клинике</h3>
-                <p className="text-xs text-gray-500">SMS-подтверждение</p>
+                <p className="text-xs text-gray-500">Выберите способ подтверждения</p>
               </div>
             </div>
 
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
-                setError("");
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="+7 (999) 123-45-67"
-            />
+            {/* Primary: VK Bridge phone (free, instant) */}
+            <div className="space-y-2">
+              <button
+                onClick={handleVkBridgePhone}
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-700 disabled:opacity-60 active:scale-[0.97] transition-all"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
+                {submitting ? "Получение..." : "Поделиться номером через ВКонтакте"}
+              </button>
+              <p className="text-xs text-gray-400 text-center">
+                Безопасно — номер берётся из вашего профиля ВК
+              </p>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-2 text-[11px] text-gray-400">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span>или</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
+            {/* Fallback: SMS verification */}
+            <div className="space-y-2">
+              <p className="text-xs text-gray-600">
+                Если номер во ВКонтакте отличается от номера в клинике — введите номер вручную, мы пришлём код в SMS:
+              </p>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  setError("");
+                }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="+7 (999) 123-45-67"
+              />
+              <button
+                onClick={handleSendCode}
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 bg-white border border-primary-500 text-primary-600 py-2.5 rounded-xl text-sm font-medium hover:bg-primary-50 disabled:opacity-60 transition-all"
+              >
+                {submitting ? "Отправка..." : "Получить код в SMS"}
+              </button>
+            </div>
 
             {error && (
               <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>
             )}
-
-            <button
-              onClick={handleSendCode}
-              disabled={submitting}
-              className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-700 disabled:opacity-60 active:scale-[0.97] transition-all"
-            >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
-              {submitting ? "Отправка..." : "Получить код в SMS"}
-            </button>
-
-            <p className="text-xs text-gray-400 text-center">
-              Введите номер, на который зарегистрирована ваша карта в клинике
-            </p>
           </div>
         )}
 

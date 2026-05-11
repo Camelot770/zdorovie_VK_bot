@@ -145,6 +145,15 @@ export const api = {
       fullName?: string;
       patients?: Patient[];
     }>("/auth/sms/verify", { phone, code, vk_user_id: vkUserId }),
+
+  // ---- Auth (VK Bridge phone — no SMS, trusted from VK) ----
+  vkPhoneLink: (phone: string, vkUserId: string) =>
+    apiPost<{
+      status: "linked" | "multiple" | "not_found";
+      patientId?: string;
+      fullName?: string;
+      patients?: Patient[];
+    }>("/auth/vk-phone-link", { phone, vk_user_id: vkUserId }),
   linkPatientById: (patientId: string, vkUserId: string) =>
     apiPost<{
       status: string;

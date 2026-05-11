@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import bridge from "@vkontakte/vk-bridge";
 import Layout from "./components/Layout";
 import MainPage from "./pages/MainPage";
@@ -11,6 +11,24 @@ import MyRecordsPage from "./pages/MyRecordsPage";
 import CancelPage from "./pages/CancelPage";
 import ProfilePage from "./pages/ProfilePage";
 import BookingWizardPage from "./pages/BookingWizardPage";
+
+/** Reads VK Mini App `hash` from URL and navigates to matching route once on mount. */
+function HashRouter() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // VK Mini Apps pass deep-link target via "hash" launch param.
+    const hash = params.get("hash") || "";
+    if (hash === "profile") {
+      navigate("/profile", { replace: true });
+    } else if (hash === "records" || hash === "my_records") {
+      navigate("/records", { replace: true });
+    } else if (hash === "booking") {
+      navigate("/booking", { replace: true });
+    }
+  }, [navigate]);
+  return null;
+}
 
 export default function App() {
   useEffect(() => {
@@ -29,6 +47,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <HashRouter />
       <Layout>
         <Routes>
           <Route path="/" element={<MainPage />} />

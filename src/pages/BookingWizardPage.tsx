@@ -66,6 +66,32 @@ export default function BookingWizardPage() {
   const navigate = useNavigate();
   const { patientId, patientName, maxUserId, loading: authLoading } = useAuth();
 
+  // SMS-verification gate: confirm the VK user has gone through SMS auth.
+  // Without this check, anyone could open the mini-app in VK, automatically
+  // get a `vk_user_id` from launch params, and book appointments under a
+  // freshly-created fake patient — no phone verification.
+  const [smsVerified, setSmsVerified] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!maxUserId) {
+      setSmsVerified(false);
+      return;
+    }
+    // Backend stores a phone on user_links only after successful /sms/verify.
+    // If there's no phone for this VK user → they bypassed SMS auth → block.
+    apiGet<{ patientId?: string; phone?: string }>(
+      `/auth/patient/${maxUserId}`,
+      { source: "vk" },
+    )
+      .then((info) => {
+        setSmsVerified(Boolean(info && info.phone));
+      })
+      .catch(() => {
+        setSmsVerified(false);
+      });
+  }, [authLoading, maxUserId]);
+
   const bookingStore = useBookingStore();
 
   const [stepIdx, setStepIdx] = useState(0);
@@ -1065,6 +1091,47 @@ export default function BookingWizardPage() {
       case "confirm":
         return <ConfirmStep />;
     }
+  }
+
+  // ─── SMS-auth gate ─────────────────────────────────────────────────
+  // While checking auth — show spinner.
+  if (authLoading || smsVerified === null) {
+    return (
+      <PageTransition>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+        </div>
+      </PageTransition>
+    );
+  }
+  // Block booking for unverified users.
+  if (!smsVerified) {
+    return (
+      <PageTransition>
+        <div className="space-y-4 py-6">
+          <div className="bg-white rounded-2xl p-5 shadow-card border border-gray-100 space-y-3">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-warning-100 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-warning-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">Требуется подтверждение номера</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Чтобы записаться на приём, сначала привяжите свой номер телефона.
+              Это нужно, чтобы найти вашу карту пациента в клинике.
+            </p>
+            <button
+              onClick={() => navigate("/profile")}
+              className="w-full bg-primary-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-700 active:scale-[0.97] transition-all"
+            >
+              Привязать номер
+            </button>
+          </div>
+        </div>
+      </PageTransition>
+    );
   }
 
   return (

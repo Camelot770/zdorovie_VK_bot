@@ -144,6 +144,7 @@ export default function ConfirmPage() {
         specializationId,
         patientId: selectedPatientId,
         serviceIds,
+        source: "vk_webapp",
       });
       navigate("/success");
     } catch (err) {

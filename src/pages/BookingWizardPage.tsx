@@ -316,6 +316,7 @@ export default function BookingWizardPage() {
         specializationId: resolvedSpecId,
         patientId: selectedPatientId,
         serviceIds: selectedServiceIds,
+        source: "vk_webapp",
       });
       // Sync to booking store for SuccessPage
       bookingStore.setDoctorId(selectedDoctorId, selectedDoctorName);

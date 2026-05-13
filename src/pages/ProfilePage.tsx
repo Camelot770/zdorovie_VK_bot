@@ -24,7 +24,7 @@ import Avatar from "../components/ui/Avatar";
 import EmptyState from "../components/ui/EmptyState";
 import type { Patient } from "../types";
 
-type LinkStep = "phone" | "code" | "pick" | "done";
+type LinkStep = "intro" | "pick" | "done";
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -32,9 +32,7 @@ export default function ProfilePage() {
   const { favorites } = useFavoritesStore();
   const resetBooking = useBookingStore((s) => s.reset);
 
-  const [linkStep, setLinkStep] = useState<LinkStep>("phone");
-  const [phone, setPhone] = useState("+7");
-  const [code, setCode] = useState("");
+  const [linkStep, setLinkStep] = useState<LinkStep>("intro");
   const [foundPatients, setFoundPatients] = useState<Patient[]>([]);
   const [showUnlinkConfirm, setShowUnlinkConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +51,8 @@ export default function ProfilePage() {
       mounted = false;
     };
   }, []);
+
+  // (Auto-share for ?autoShare=1 is now handled globally by <AuthGate /> in Layout.)
 
   const fullName =
     (vkProfile && [vkProfile.first_name, vkProfile.last_name].filter(Boolean).join(" ")) ||
@@ -99,25 +99,6 @@ export default function ProfilePage() {
     return fallback;
   }
 
-  async function handleSendCode() {
-    if (!vkUserId) return;
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 11) {
-      setError("Введите номер целиком (минимум 11 цифр)");
-      return;
-    }
-    setSubmitting(true);
-    setError("");
-    try {
-      await api.smsSend(digits, vkUserId);
-      setLinkStep("code");
-    } catch (err) {
-      setError(friendlyError(err, "Не удалось отправить SMS. Попробуйте позже."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
   /**
    * Get user's phone via VK Bridge (VKWebAppGetPhoneNumber).
    * VK shows a native confirmation dialog. If user grants — phone is returned
@@ -143,38 +124,11 @@ export default function ProfilePage() {
         setLinkStep("pick");
       } else {
         setError(
-          "Пациент с таким номером не найден в клинике. Обратитесь в регистратуру или попробуйте другой способ.",
+          "Пациент с таким номером не найден в клинике. Обратитесь в регистратуру по телефону +7 (843) 204-2-700.",
         );
       }
     } catch (err) {
       setError(friendlyError(err, "Не удалось получить номер через ВКонтакте."));
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleVerifyCode() {
-    if (!vkUserId) return;
-    const digits = phone.replace(/\D/g, "");
-    if (code.length < 4) {
-      setError("Введите код полностью");
-      return;
-    }
-    setSubmitting(true);
-    setError("");
-    try {
-      const result = await api.smsVerify(digits, code, vkUserId);
-      if (result.status === "linked" && result.patientId) {
-        setPatientId(result.patientId, result.fullName || "");
-        setLinkStep("done");
-      } else if (result.status === "multiple" && result.patients) {
-        setFoundPatients(result.patients);
-        setLinkStep("pick");
-      } else {
-        setError("Пациент с таким номером не найден. Обратитесь в клинику для регистрации.");
-      }
-    } catch (err) {
-      setError(friendlyError(err, "Неверный код или истёк срок действия."));
     } finally {
       setSubmitting(false);
     }
@@ -213,9 +167,7 @@ export default function ProfilePage() {
       );
       resetPatient();
       setShowUnlinkConfirm(false);
-      setLinkStep("phone");
-      setPhone("+7");
-      setCode("");
+      setLinkStep("intro");
     } catch (err) {
       setError(friendlyError(err, "Ошибка отвязки. Попробуйте позже."));
     } finally {
@@ -344,121 +296,38 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Step 1: enter phone */}
-        {!patientId && linkStep === "phone" && (
-          <div className="bg-white rounded-2xl p-4 shadow-card border border-gray-100 space-y-4">
+        {/* Link via VK Bridge phone share */}
+        {!patientId && linkStep === "intro" && (
+          <div className="bg-white rounded-2xl p-4 shadow-card border border-gray-100 space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-8 h-8 rounded-lg bg-primary-50 flex items-center justify-center flex-shrink-0">
                 <Shield className="w-4 h-4 text-primary-600" />
               </div>
               <div>
                 <h3 className="font-semibold text-gray-900 text-sm">Привязка к клинике</h3>
-                <p className="text-xs text-gray-500">Выберите способ подтверждения</p>
+                <p className="text-xs text-gray-500">Поделитесь номером для входа</p>
               </div>
             </div>
 
-            {/* Primary: VK Bridge phone (free, instant) */}
-            <div className="space-y-2">
-              <button
-                onClick={handleVkBridgePhone}
-                disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-700 disabled:opacity-60 active:scale-[0.97] transition-all"
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
-                {submitting ? "Получение..." : "Поделиться номером через ВКонтакте"}
-              </button>
-              <p className="text-xs text-gray-400 text-center">
-                Безопасно — номер берётся из вашего профиля ВК
-              </p>
-            </div>
-
-            {/* Divider */}
-            <div className="flex items-center gap-2 text-[11px] text-gray-400">
-              <div className="flex-1 h-px bg-gray-200" />
-              <span>или</span>
-              <div className="flex-1 h-px bg-gray-200" />
-            </div>
-
-            {/* Fallback: SMS verification */}
-            <div className="space-y-2">
-              <p className="text-xs text-gray-600">
-                Если номер во ВКонтакте отличается от номера в клинике — введите номер вручную, мы пришлём код в SMS:
-              </p>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => {
-                  setPhone(e.target.value);
-                  setError("");
-                }}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                placeholder="+7 (999) 123-45-67"
-              />
-              <button
-                onClick={handleSendCode}
-                disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-white border border-primary-500 text-primary-600 py-2.5 rounded-xl text-sm font-medium hover:bg-primary-50 disabled:opacity-60 transition-all"
-              >
-                {submitting ? "Отправка..." : "Получить код в SMS"}
-              </button>
-            </div>
-
-            {error && (
-              <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>
-            )}
-          </div>
-        )}
-
-        {/* Step 2: enter code */}
-        {!patientId && linkStep === "code" && (
-          <div className="bg-white rounded-2xl p-4 shadow-card border border-gray-100 space-y-3">
-            <h3 className="font-semibold text-gray-900 text-sm">Введите код из SMS</h3>
-            <p className="text-xs text-gray-500">
-              Код отправлен на номер {phone}. Действителен 5 минут.
+            <button
+              onClick={handleVkBridgePhone}
+              disabled={submitting}
+              className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-primary-700 disabled:opacity-60 active:scale-[0.97] transition-all"
+            >
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
+              {submitting ? "Получение..." : "Поделиться номером через ВКонтакте"}
+            </button>
+            <p className="text-xs text-gray-400 text-center">
+              Безопасно — номер берётся из вашего профиля ВК
             </p>
 
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={code}
-              onChange={(e) => {
-                setCode(e.target.value.replace(/\D/g, ""));
-                setError("");
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-base text-center tracking-widest focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="0000"
-              autoFocus
-            />
-
             {error && (
               <p className="text-xs text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</p>
             )}
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setLinkStep("phone");
-                  setError("");
-                  setCode("");
-                }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-              >
-                Назад
-              </button>
-              <button
-                onClick={handleVerifyCode}
-                disabled={submitting}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60 transition-all"
-              >
-                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                {submitting ? "Проверка..." : "Подтвердить"}
-              </button>
-            </div>
           </div>
         )}
 
-        {/* Step 3: pick from multiple */}
+        {/* Pick from multiple matches */}
         {!patientId && linkStep === "pick" && (
           <div className="bg-white rounded-2xl p-4 shadow-card border border-gray-100 space-y-3">
             <h3 className="font-semibold text-gray-900 text-sm">Найдено несколько карточек</h3>
@@ -491,8 +360,9 @@ export default function ProfilePage() {
 
             <button
               onClick={() => {
-                setLinkStep("phone");
+                setLinkStep("intro");
                 setError("");
+                setFoundPatients([]);
               }}
               className="w-full py-2.5 rounded-xl text-sm font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
             >

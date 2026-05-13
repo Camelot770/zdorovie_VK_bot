@@ -12,15 +12,28 @@ import CancelPage from "./pages/CancelPage";
 import ProfilePage from "./pages/ProfilePage";
 import BookingWizardPage from "./pages/BookingWizardPage";
 
-/** Reads VK Mini App `hash` from URL and navigates to matching route once on mount. */
+/** Reads VK Mini App `hash` from URL and navigates to matching route once on mount.
+ *
+ * VK passes deep-link `hash` in TWO different shapes depending on platform:
+ *   1. Query param: `?hash=profile&vk_user_id=...`        (web / m.vk.com / some clients)
+ *   2. URL fragment: `#profile`                            (open_app action, mobile)
+ *
+ * We read both and fall back to whichever is present. */
 function HashRouter() {
   const navigate = useNavigate();
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    // VK Mini Apps pass deep-link target via "hash" launch param.
-    const hash = params.get("hash") || "";
+    let hash = params.get("hash") || "";
+    if (!hash && window.location.hash) {
+      hash = window.location.hash.replace(/^#/, "").split("?")[0].split("&")[0];
+    }
+    if (!hash) return;
+
     if (hash === "profile") {
       navigate("/profile", { replace: true });
+    } else if (hash === "link_phone") {
+      // Came from VK bot's "Поделиться номером" button → auto-fire the share dialog
+      navigate("/profile?autoShare=1", { replace: true });
     } else if (hash === "records" || hash === "my_records") {
       navigate("/records", { replace: true });
     } else if (hash === "booking") {

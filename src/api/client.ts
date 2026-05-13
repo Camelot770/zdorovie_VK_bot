@@ -135,18 +135,7 @@ export const api = {
   restoreRecord: (id: string) =>
     apiPost<Appointment>(`/records/${id}/restore`),
 
-  // ---- Auth (VK SMS-based) ----
-  smsSend: (phone: string, vkUserId: string) =>
-    apiPost<{ status: string }>("/auth/sms/send", { phone, vk_user_id: vkUserId }),
-  smsVerify: (phone: string, code: string, vkUserId: string) =>
-    apiPost<{
-      status: "linked" | "multiple" | "not_found";
-      patientId?: string;
-      fullName?: string;
-      patients?: Patient[];
-    }>("/auth/sms/verify", { phone, code, vk_user_id: vkUserId }),
-
-  // ---- Auth (VK Bridge phone — no SMS, trusted from VK) ----
+  // ---- Auth (VK Bridge phone — only path, no SMS) ----
   vkPhoneLink: (phone: string, vkUserId: string) =>
     apiPost<{
       status: "linked" | "multiple" | "not_found";

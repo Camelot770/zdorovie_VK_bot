@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import BottomNav from "./ui/BottomNav";
+import AuthGate from "./AuthGate";
 
 export default function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -41,6 +42,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </header>
       <main className="max-w-lg mx-auto px-4 py-4 pb-24">{children}</main>
       <BottomNav />
+      <AuthGate />
     </div>
   );
 }

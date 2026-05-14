@@ -62,17 +62,31 @@ export default function PatientSelectPage() {
       .then((pts) => {
         const list = pts || [];
         setPatients(list);
-        // If nothing chosen yet, suggest a sensible default based on
-        // isChild context
+        // If nothing chosen yet, suggest a sensible default that passes
+        // the age check. Ineligible patients are never auto-selected.
+        const specIsChildLocal = /детск/i.test(specializationName);
+        const isEligible = (p: LinkedPatient): boolean => {
+          const a = calcAge(p.birthDate || "");
+          if (a === null) return true;
+          if (specIsChildLocal && a >= 18) return false;
+          if (!specIsChildLocal && a < 18 && !isChild) return false;
+          return true;
+        };
         setSelectedId((current) => {
-          if (current) return current;
-          if (list.length === 1) return list[0].patientId;
-          if (list.length > 1) {
-            const match = list.find((p) => {
+          // If a previous selection is no longer eligible, drop it.
+          if (current) {
+            const prev = list.find((p) => p.patientId === current);
+            if (prev && !isEligible(prev)) return "";
+            return current;
+          }
+          const eligibles = list.filter(isEligible);
+          if (eligibles.length === 1) return eligibles[0].patientId;
+          if (eligibles.length > 1) {
+            const match = eligibles.find((p) => {
               const a = calcAge(p.birthDate || "");
               return isChild ? a !== null && a < 18 : a === null || a >= 18;
             });
-            return match ? match.patientId : "";
+            return match ? match.patientId : eligibles[0].patientId;
           }
           return "";
         });
@@ -88,7 +102,22 @@ export default function PatientSelectPage() {
     }
   }, [appointmentAt, navigate]);
 
+  /** Determine if a patient's age matches the chosen specialization. */
+  function isPatientEligible(p: LinkedPatient): boolean {
+    const age = calcAge(p.birthDate || "");
+    if (age === null) return true; // unknown age — let server validate
+    const specIsChild = /детск/i.test(specializationName);
+    if (specIsChild && age >= 18) return false;
+    if (!specIsChild && age < 18 && !isChild) {
+      // Adult specialization picked by adult user → block minor patients.
+      // (If isChild=true, the user explicitly chose "for kid" mode, so this branch is moot.)
+      return false;
+    }
+    return true;
+  }
+
   function handleSelect(p: LinkedPatient) {
+    if (!isPatientEligible(p)) return;
     setSelectedId(p.patientId);
     setError("");
   }
@@ -159,8 +188,6 @@ export default function PatientSelectPage() {
     : "";
   const timeStr = appointmentAt ? appointmentAt.slice(11, 16) : "";
 
-  const specIsChild = /детск/i.test(specializationName);
-
   // If selected patient was restored from store and not present in fresh list,
   // surface the name from the store so the button label is still meaningful.
   const selectedDisplayName =
@@ -210,26 +237,29 @@ export default function PatientSelectPage() {
               const age = calcAge(p.birthDate || "");
               const ageStr = age !== null ? `${age} ${ageLabel(age)}` : "";
               const isSelected = p.patientId === selectedId;
-              const isAdult = age === null ? null : age >= 18;
-              const mismatch =
-                age !== null &&
-                ((specIsChild && isAdult) || (!specIsChild && !isAdult && isChild === false && age < 18));
+              const eligible = isPatientEligible(p);
 
               return (
                 <button
                   key={p.patientId}
                   onClick={() => handleSelect(p)}
+                  disabled={!eligible}
+                  aria-disabled={!eligible}
                   className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 transition-all text-left ${
-                    isSelected
-                      ? "bg-primary-50 border-primary-500 shadow-card"
-                      : "bg-white border-gray-100 hover:border-primary-200 active:bg-gray-50"
+                    !eligible
+                      ? "bg-gray-50 border-gray-100 opacity-60 cursor-not-allowed"
+                      : isSelected
+                        ? "bg-primary-50 border-primary-500 shadow-card"
+                        : "bg-white border-gray-100 hover:border-primary-200 active:bg-gray-50"
                   }`}
                 >
                   <div
                     className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                      isSelected
-                        ? "bg-primary-500 text-white"
-                        : "bg-gray-50 text-gray-400"
+                      !eligible
+                        ? "bg-gray-100 text-gray-300"
+                        : isSelected
+                          ? "bg-primary-500 text-white"
+                          : "bg-gray-50 text-gray-400"
                     }`}
                   >
                     <User className="w-5 h-5" />
@@ -237,16 +267,22 @@ export default function PatientSelectPage() {
                   <div className="flex-1 min-w-0">
                     <p
                       className={`text-sm font-semibold truncate ${
-                        isSelected ? "text-primary-900" : "text-gray-900"
+                        !eligible
+                          ? "text-gray-400"
+                          : isSelected
+                            ? "text-primary-900"
+                            : "text-gray-900"
                       }`}
                     >
                       {p.fullName}
                     </p>
                     <div className="flex items-center gap-2 mt-0.5">
                       {ageStr && (
-                        <span className="text-xs text-gray-500">{ageStr}</span>
+                        <span className={`text-xs ${!eligible ? "text-gray-400" : "text-gray-500"}`}>
+                          {ageStr}
+                        </span>
                       )}
-                      {mismatch && (
+                      {!eligible && (
                         <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
                           <AlertCircle className="w-2.5 h-2.5" />
                           возраст не подходит
@@ -254,7 +290,11 @@ export default function PatientSelectPage() {
                       )}
                     </div>
                   </div>
-                  {isSelected ? (
+                  {!eligible ? (
+                    <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wide flex-shrink-0">
+                      Недоступно
+                    </span>
+                  ) : isSelected ? (
                     <Check className="w-5 h-5 text-primary-600 flex-shrink-0" />
                   ) : (
                     <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />

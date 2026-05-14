@@ -176,7 +176,7 @@ export default function SlotsPage() {
     }
 
     setAppointmentAt(slot.startAt);
-    navigate("/confirm");
+    navigate("/select-patient");
   }
 
   return (

@@ -1,0 +1,393 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  User,
+  Users,
+  UserPlus,
+  Loader2,
+  AlertCircle,
+  Check,
+  CheckCircle,
+  Phone,
+  ChevronRight,
+} from "lucide-react";
+import { apiGetFresh, apiPost } from "../api/client";
+import { useBookingStore } from "../store/booking";
+import { useAuth } from "../hooks/useAuth";
+import PageTransition from "../components/ui/PageTransition";
+import { calcAge, ageLabel } from "../utils/age";
+import type { LinkedPatient } from "../types";
+
+/**
+ * Dedicated patient-selection step between SlotsPage and ConfirmPage.
+ * User explicitly taps the patient they want to book for; ConfirmPage just
+ * shows the result without an inline picker.
+ */
+export default function PatientSelectPage() {
+  const navigate = useNavigate();
+  const { maxUserId } = useAuth();
+  const {
+    doctorName,
+    specializationName,
+    clinicName,
+    appointmentAt,
+    isChild,
+    patientId: storePatientId,
+    patientName: storePatientName,
+    setPatientId,
+  } = useBookingStore();
+
+  const [patients, setPatients] = useState<LinkedPatient[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>(storePatientId || "");
+  const [error, setError] = useState("");
+
+  // Add-patient form
+  const [showRegForm, setShowRegForm] = useState(false);
+  const [regLastName, setRegLastName] = useState("");
+  const [regFirstName, setRegFirstName] = useState("");
+  const [regMiddleName, setRegMiddleName] = useState("");
+  const [regGender, setRegGender] = useState<"male" | "female">("male");
+  const [regBirthDate, setRegBirthDate] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [registering, setRegistering] = useState(false);
+
+  // Run ONCE — never override user's manual selection on re-render
+  const fetchedRef = useRef(false);
+  useEffect(() => {
+    if (!maxUserId || fetchedRef.current) return;
+    fetchedRef.current = true;
+    setLoading(true);
+    apiGetFresh<LinkedPatient[]>(`/auth/patients/${maxUserId}`, { source: "vk" })
+      .then((pts) => {
+        const list = pts || [];
+        setPatients(list);
+        // If nothing chosen yet, suggest a sensible default based on
+        // isChild context
+        setSelectedId((current) => {
+          if (current) return current;
+          if (list.length === 1) return list[0].patientId;
+          if (list.length > 1) {
+            const match = list.find((p) => {
+              const a = calcAge(p.birthDate || "");
+              return isChild ? a !== null && a < 18 : a === null || a >= 18;
+            });
+            return match ? match.patientId : "";
+          }
+          return "";
+        });
+      })
+      .catch(() => setError("Не удалось загрузить пациентов"))
+      .finally(() => setLoading(false));
+  }, [maxUserId, isChild]);
+
+  // If wrong route entry (no slot picked yet) — bounce back to booking start
+  useEffect(() => {
+    if (!appointmentAt) {
+      navigate("/", { replace: true });
+    }
+  }, [appointmentAt, navigate]);
+
+  function handleSelect(p: LinkedPatient) {
+    setSelectedId(p.patientId);
+    setError("");
+  }
+
+  async function handleRegister() {
+    if (!regLastName || !regFirstName || !regBirthDate || !regPhone) {
+      setError("Заполните все обязательные поля");
+      return;
+    }
+    if (!maxUserId) {
+      setError("Ошибка авторизации");
+      return;
+    }
+    setRegistering(true);
+    setError("");
+    try {
+      const result = await apiPost<{ status: string; patientId: string; fullName: string }>(
+        "/auth/register",
+        {
+          max_user_id: `vk:${maxUserId}`,
+          lastName: regLastName,
+          firstName: regFirstName,
+          middleName: regMiddleName || undefined,
+          noMiddleName: !regMiddleName,
+          gender: regGender,
+          birthDate: regBirthDate,
+          phone: regPhone.replace(/[\s\-()]/g, ""),
+        },
+      );
+      const newPatient: LinkedPatient = {
+        patientId: result.patientId,
+        fullName: result.fullName,
+        birthDate: regBirthDate,
+      };
+      setPatients((prev) => [...prev, newPatient]);
+      setSelectedId(result.patientId);
+      setShowRegForm(false);
+      // Clear form
+      setRegLastName("");
+      setRegFirstName("");
+      setRegMiddleName("");
+      setRegBirthDate("");
+      setRegPhone("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка регистрации пациента");
+    } finally {
+      setRegistering(false);
+    }
+  }
+
+  function handleContinue() {
+    const picked = patients.find((p) => p.patientId === selectedId);
+    if (!picked) {
+      setError("Выберите пациента для записи");
+      return;
+    }
+    // Persist into booking store — ConfirmPage reads it from here
+    setPatientId(picked.patientId, picked.fullName, picked.birthDate || "");
+    navigate("/confirm");
+  }
+
+  const dateStr = appointmentAt
+    ? new Date(appointmentAt).toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+        weekday: "short",
+      })
+    : "";
+  const timeStr = appointmentAt ? appointmentAt.slice(11, 16) : "";
+
+  const specIsChild = /детск/i.test(specializationName);
+
+  // If selected patient was restored from store and not present in fresh list,
+  // surface the name from the store so the button label is still meaningful.
+  const selectedDisplayName =
+    patients.find((p) => p.patientId === selectedId)?.fullName ||
+    (selectedId && selectedId === storePatientId ? storePatientName : "");
+
+  return (
+    <PageTransition>
+      <div className="space-y-4 pb-28">
+        {/* Booking context summary */}
+        <div className="bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl p-4 shadow-lg text-white relative overflow-hidden">
+          <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
+          <div className="relative z-10">
+            <p className="text-[11px] text-white/70 uppercase tracking-wider mb-1">Запись</p>
+            <h2 className="text-[15px] font-bold leading-tight">{doctorName || "Врач"}</h2>
+            <p className="text-[12px] text-white/80 mt-1">
+              {[specializationName, dateStr, timeStr].filter(Boolean).join(" · ")}
+            </p>
+            {clinicName && (
+              <p className="text-[11px] text-white/70 mt-0.5">{clinicName}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Heading */}
+        <div className="flex items-center gap-2 px-1">
+          <Users className="w-4 h-4 text-primary-600" />
+          <h3 className="text-base font-bold text-gray-900">Кому записываемся?</h3>
+        </div>
+
+        {/* Patient list */}
+        {loading ? (
+          <div className="bg-white rounded-2xl p-6 flex items-center justify-center gap-2 text-gray-400 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Загружаем пациентов…
+          </div>
+        ) : patients.length === 0 ? (
+          <div className="bg-white rounded-2xl p-6 text-center text-sm text-gray-500 space-y-1">
+            <p>Нет привязанных пациентов</p>
+            <p className="text-xs text-gray-400">
+              Добавьте кого-нибудь через форму ниже
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {patients.map((p) => {
+              const age = calcAge(p.birthDate || "");
+              const ageStr = age !== null ? `${age} ${ageLabel(age)}` : "";
+              const isSelected = p.patientId === selectedId;
+              const isAdult = age === null ? null : age >= 18;
+              const mismatch =
+                age !== null &&
+                ((specIsChild && isAdult) || (!specIsChild && !isAdult && isChild === false && age < 18));
+
+              return (
+                <button
+                  key={p.patientId}
+                  onClick={() => handleSelect(p)}
+                  className={`w-full flex items-center gap-3 p-3.5 rounded-2xl border-2 transition-all text-left ${
+                    isSelected
+                      ? "bg-primary-50 border-primary-500 shadow-card"
+                      : "bg-white border-gray-100 hover:border-primary-200 active:bg-gray-50"
+                  }`}
+                >
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                      isSelected
+                        ? "bg-primary-500 text-white"
+                        : "bg-gray-50 text-gray-400"
+                    }`}
+                  >
+                    <User className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className={`text-sm font-semibold truncate ${
+                        isSelected ? "text-primary-900" : "text-gray-900"
+                      }`}
+                    >
+                      {p.fullName}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      {ageStr && (
+                        <span className="text-xs text-gray-500">{ageStr}</span>
+                      )}
+                      {mismatch && (
+                        <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                          <AlertCircle className="w-2.5 h-2.5" />
+                          возраст не подходит
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {isSelected ? (
+                    <Check className="w-5 h-5 text-primary-600 flex-shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Add patient — toggle */}
+        {!showRegForm && (
+          <button
+            onClick={() => {
+              setShowRegForm(true);
+              setError("");
+            }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-primary-200 text-primary-600 text-sm font-medium hover:bg-primary-50 transition-colors"
+          >
+            <UserPlus className="w-4 h-4" />
+            Добавить пациента
+          </button>
+        )}
+
+        {/* Add patient — form */}
+        {showRegForm && (
+          <div className="bg-white rounded-2xl p-4 shadow-card border border-gray-100 space-y-3">
+            <h3 className="font-semibold text-sm text-gray-900 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-primary-600" />
+              Новый пациент
+            </h3>
+            <input
+              placeholder="Фамилия *"
+              value={regLastName}
+              onChange={(e) => setRegLastName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <input
+              placeholder="Имя *"
+              value={regFirstName}
+              onChange={(e) => setRegFirstName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <input
+              placeholder="Отчество"
+              value={regMiddleName}
+              onChange={(e) => setRegMiddleName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRegGender("male")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  regGender === "male"
+                    ? "bg-primary-500 text-white"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                Мужской
+              </button>
+              <button
+                onClick={() => setRegGender("female")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  regGender === "female"
+                    ? "bg-primary-500 text-white"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                Женский
+              </button>
+            </div>
+            <input
+              type="date"
+              placeholder="Дата рождения *"
+              value={regBirthDate}
+              onChange={(e) => setRegBirthDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex items-center gap-2">
+              <Phone className="w-4 h-4 text-gray-400" />
+              <input
+                type="tel"
+                placeholder="Телефон *"
+                value={regPhone}
+                onChange={(e) => setRegPhone(e.target.value)}
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowRegForm(false)}
+                className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-600"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleRegister}
+                disabled={registering}
+                className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-sm font-medium bg-primary-500 text-white disabled:opacity-50"
+              >
+                {registering ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Сохранить"
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="flex items-start gap-2 bg-red-50 text-red-700 text-sm p-3 rounded-lg">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {/* Sticky bottom CTA */}
+        <div className="fixed bottom-0 left-0 right-0 px-4 pb-4 pt-3 bg-gradient-to-t from-gray-50 to-gray-50/0 z-30">
+          <div className="max-w-lg mx-auto">
+            <button
+              onClick={handleContinue}
+              disabled={!selectedId}
+              className="w-full flex items-center justify-center gap-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 disabled:text-gray-500 text-white font-semibold py-3.5 rounded-2xl shadow-lg transition-all active:scale-[0.98]"
+            >
+              <CheckCircle className="w-5 h-5" />
+              {selectedDisplayName
+                ? `Продолжить → ${selectedDisplayName.split(" ")[0]}`
+                : "Выберите пациента"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </PageTransition>
+  );
+}

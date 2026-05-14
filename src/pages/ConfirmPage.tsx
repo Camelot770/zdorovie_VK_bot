@@ -108,7 +108,7 @@ export default function ConfirmPage() {
 
   return (
     <PageTransition>
-      <div className="space-y-4 pb-28">
+      <div className="space-y-4 pb-44">
         <div className="bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl p-4 shadow-lg flex items-center gap-3.5 relative overflow-hidden">
           <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full bg-white/10" />
           <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
@@ -175,7 +175,7 @@ export default function ConfirmPage() {
         )}
 
         {/* Sticky confirm CTA */}
-        <div className="fixed bottom-0 left-0 right-0 px-4 pb-4 pt-3 bg-gradient-to-t from-gray-50 to-gray-50/0 z-30">
+        <div className="fixed left-0 right-0 px-4 pt-3 pb-3 bg-gradient-to-t from-gray-50 to-gray-50/0 z-[60] bottom-[calc(64px+env(safe-area-inset-bottom))]">
           <div className="max-w-lg mx-auto">
             <button
               onClick={handleConfirm}

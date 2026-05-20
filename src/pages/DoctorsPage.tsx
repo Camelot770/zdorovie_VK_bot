@@ -222,14 +222,17 @@ export default function DoctorsPage() {
 
   let list = Array.isArray(doctors) ? doctors : [];
 
-  // STRICT mode: doctor must have at least one (clinic, spec) pair where:
-  //   - clinic matches the selected clinicId (if any)
-  //   - spec name matches the patient-age mode by name
-  //   - spec matches the pre-selected specializationId (if any)
-  //
-  // Previously we only checked spec — so a doctor who happened to have the
-  // spec at a DIFFERENT clinic would show up under the wrong clinic with an
-  // empty address.
+  // Filtering strategy:
+  // 1. If both clinicId AND specializationId are in URL, trust the backend
+  //    /doctors response — 1С already filtered the list, our local checks
+  //    can disagree with 1С (we've seen schedules holding a doctor that
+  //    /doctors profile doesn't reflect in its clinics[] array).
+  // 2. Otherwise, apply spec-by-name (age mode) and optional clinic check
+  //    against the doctor.clinics[] array.
+  // 3. If schedule data loaded for (clinic, spec) AND lists at least one
+  //    practising doctor, use it as an additional safety net to remove
+  //    1С "ghost" doctors. We DON'T apply it as a hard requirement to
+  //    avoid hiding legitimate doctors when /schedules returns empty.
   {
     const matchingSpecIds = new Set(
       (specsData || [])
@@ -238,9 +241,9 @@ export default function DoctorsPage() {
     );
 
     if (specializationId && !matchingSpecIds.has(specializationId)) {
-      // Pre-selected spec doesn't match the current age mode — nothing to show.
       list = [];
-    } else {
+    } else if (!(clinicId && specializationId)) {
+      // Apply local filter only when backend wasn't given both filters.
       list = list.filter((d) =>
         (d.clinics || []).some((cl) => {
           if (clinicId && cl.clinicId !== clinicId) return false;
@@ -253,11 +256,16 @@ export default function DoctorsPage() {
     }
   }
 
-  // Strict filter by schedule presence — only when a clinic is selected
-  // and schedules have actually loaded with at least one entry. This
-  // removes doctors who 1С claims work at the clinic but in reality have
-  // no schedule (so booking would fail anyway).
-  if (clinicId && Array.isArray(schedules) && practisingDoctorIds.size > 0) {
+  // Bonus filter: when schedules tell us about ghost doctors, prune them.
+  // Activated only if /schedules came back non-empty for this clinic+spec,
+  // AND the practising set actually overlaps with the doctor list (avoids
+  // wiping the list when /schedules returned data for unrelated doctors).
+  if (
+    clinicId &&
+    Array.isArray(schedules) &&
+    practisingDoctorIds.size > 0 &&
+    list.some((d) => practisingDoctorIds.has(d.id))
+  ) {
     list = list.filter((d) => practisingDoctorIds.has(d.id));
   }
 

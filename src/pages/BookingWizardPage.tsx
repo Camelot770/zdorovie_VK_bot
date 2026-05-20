@@ -717,19 +717,12 @@ export default function BookingWizardPage() {
       );
     }
 
-    // Filter specializations by patient age and exclude УЗИ
-    const patientAge = bookingStore.isChild ? 10 : 30;
+    // STRICT mode: filter specs purely by name vs patient age.
+    // 1С ageFrom/ageTo is ignored.
     const specs = (specializations || []).filter((s) => {
-      // Exclude УЗИ specializations
       if (/узи|узд|ультразв/i.test(s.name)) return false;
-      let from = s.ageFrom ?? 0;
-      let to = s.ageTo ?? 999;
-      // Name-based fallback: "Детский" in name → child-only (0-17)
-      if (from === 0 && to === 999 && /детск|педиатр/i.test(s.name)) {
-        from = 0;
-        to = 17;
-      }
-      return patientAge >= from && patientAge <= to;
+      const specIsChild = /детск|педиатр/i.test(s.name);
+      return specIsChild === bookingStore.isChild;
     });
 
     return (

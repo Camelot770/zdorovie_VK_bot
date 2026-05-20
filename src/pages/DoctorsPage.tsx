@@ -198,72 +198,31 @@ export default function DoctorsPage() {
 
   let list = Array.isArray(doctors) ? doctors : [];
 
-  // Filter doctors by patient age. Defaults when 1С leaves ageFrom/ageTo blank:
-  //   - spec name has "детск/педиатр" → 0..17
-  //   - any other spec               → 18..120 (treat as adult-only)
-  // So adults never see kid-only doctors and kids never see adult-only doctors.
+  // STRICT mode: doctor must have at least one spec matching the patient
+  // age by NAME. Ignores 1С ageFrom/ageTo entirely — single source of truth
+  // is the spec name (детск/педиатр or not).
   {
-    const patientAge = isChild ? 10 : 30;
-    const childSpecIds = new Set<string>();
-    const adultSpecIds = new Set<string>();
-    for (const spec of specsData || []) {
-      if (spec.ageFrom == null && spec.ageTo == null) {
-        if (/детск|педиатр/i.test(spec.name)) {
-          childSpecIds.add(spec.id);
-        } else {
-          adultSpecIds.add(spec.id);
-        }
-      }
-    }
+    const matchingSpecIds = new Set(
+      (specsData || [])
+        .filter((s) => /детск|педиатр/i.test(s.name) === isChild)
+        .map((s) => s.id),
+    );
     if (specializationId) {
-      list = list.filter((d) =>
-        (d.clinics || []).some((cl) =>
-          (cl.specializations || []).some((s) => {
-            if (s.specializationId !== specializationId) return false;
-            const apiFrom = s.ageFrom;
-            const apiTo = s.ageTo;
-            let from: number;
-            let to: number;
-            if (apiFrom == null && apiTo == null) {
-              if (childSpecIds.has(s.specializationId)) {
-                from = 0; to = 17;
-              } else if (adultSpecIds.has(s.specializationId)) {
-                from = 18; to = 120;
-              } else {
-                from = 0; to = 120;
-              }
-            } else {
-              from = apiFrom ?? 0;
-              to = apiTo ?? 120;
-            }
-            return patientAge >= from && patientAge <= to;
-          })
-        )
-      );
+      // Spec is pre-selected — just verify it matches the mode
+      if (!matchingSpecIds.has(specializationId)) {
+        list = [];
+      } else {
+        list = list.filter((d) =>
+          (d.clinics || []).some((cl) =>
+            (cl.specializations || []).some((s) => s.specializationId === specializationId),
+          ),
+        );
+      }
     } else {
-      // No spec selected — at least filter by patient age across all specs
       list = list.filter((d) =>
         (d.clinics || []).some((cl) =>
-          (cl.specializations || []).some((s) => {
-            const apiFrom = s.ageFrom;
-            const apiTo = s.ageTo;
-            let from: number;
-            let to: number;
-            if (apiFrom == null && apiTo == null) {
-              if (childSpecIds.has(s.specializationId)) {
-                from = 0; to = 17;
-              } else if (adultSpecIds.has(s.specializationId)) {
-                from = 18; to = 120;
-              } else {
-                from = 0; to = 120;
-              }
-            } else {
-              from = apiFrom ?? 0;
-              to = apiTo ?? 120;
-            }
-            return patientAge >= from && patientAge <= to;
-          })
-        )
+          (cl.specializations || []).some((s) => matchingSpecIds.has(s.specializationId)),
+        ),
       );
     }
   }

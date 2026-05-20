@@ -198,31 +198,33 @@ export default function DoctorsPage() {
 
   let list = Array.isArray(doctors) ? doctors : [];
 
-  // STRICT mode: doctor must have at least one spec matching the patient
-  // age by NAME. Ignores 1С ageFrom/ageTo entirely — single source of truth
-  // is the spec name (детск/педиатр or not).
+  // STRICT mode: doctor must have at least one (clinic, spec) pair where:
+  //   - clinic matches the selected clinicId (if any)
+  //   - spec name matches the patient-age mode by name
+  //   - spec matches the pre-selected specializationId (if any)
+  //
+  // Previously we only checked spec — so a doctor who happened to have the
+  // spec at a DIFFERENT clinic would show up under the wrong clinic with an
+  // empty address.
   {
     const matchingSpecIds = new Set(
       (specsData || [])
         .filter((s) => /детск|педиатр/i.test(s.name) === isChild)
         .map((s) => s.id),
     );
-    if (specializationId) {
-      // Spec is pre-selected — just verify it matches the mode
-      if (!matchingSpecIds.has(specializationId)) {
-        list = [];
-      } else {
-        list = list.filter((d) =>
-          (d.clinics || []).some((cl) =>
-            (cl.specializations || []).some((s) => s.specializationId === specializationId),
-          ),
-        );
-      }
+
+    if (specializationId && !matchingSpecIds.has(specializationId)) {
+      // Pre-selected spec doesn't match the current age mode — nothing to show.
+      list = [];
     } else {
       list = list.filter((d) =>
-        (d.clinics || []).some((cl) =>
-          (cl.specializations || []).some((s) => matchingSpecIds.has(s.specializationId)),
-        ),
+        (d.clinics || []).some((cl) => {
+          if (clinicId && cl.clinicId !== clinicId) return false;
+          return (cl.specializations || []).some((s) => {
+            if (specializationId) return s.specializationId === specializationId;
+            return matchingSpecIds.has(s.specializationId);
+          });
+        }),
       );
     }
   }

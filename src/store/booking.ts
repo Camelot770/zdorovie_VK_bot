@@ -45,7 +45,15 @@ const initial = {
 
 export const useBookingStore = create<BookingState>((set) => ({
   ...initial,
-  setIsChild: (v) => set({ isChild: v, specializationId: "", specializationName: "", doctorId: "", doctorName: "", serviceIds: "", price: 0 }),
+  setIsChild: (v) => set({
+    isChild: v,
+    specializationId: "", specializationName: "",
+    doctorId: "", doctorName: "",
+    serviceIds: "", price: 0,
+    // Toggling adult ↔ child invalidates the previously chosen patient too,
+    // otherwise stale patientId can sneak into a new booking flow.
+    patientId: "", patientName: "", patientBirthDate: "",
+  }),
   setClinicId: (id, name) => set({ clinicId: id, clinicName: name || "" }),
   setSpecializationId: (id, name) => set({ specializationId: id, specializationName: name || "" }),
   setDoctorId: (id, name) => set({ doctorId: id, doctorName: name || "" }),

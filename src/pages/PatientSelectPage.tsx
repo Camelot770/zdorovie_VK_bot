@@ -64,7 +64,7 @@ export default function PatientSelectPage() {
         setPatients(list);
         // If nothing chosen yet, suggest a sensible default that passes
         // the age check. Ineligible patients are never auto-selected.
-        const specIsChildLocal = /детск/i.test(specializationName);
+        const specIsChildLocal = /детск|педиатр/i.test(specializationName);
         const isEligible = (p: LinkedPatient): boolean => {
           const a = calcAge(p.birthDate || "");
           if (a === null) return true;
@@ -106,7 +106,7 @@ export default function PatientSelectPage() {
   function isPatientEligible(p: LinkedPatient): boolean {
     const age = calcAge(p.birthDate || "");
     if (age === null) return true; // unknown age — let server validate
-    const specIsChild = /детск/i.test(specializationName);
+    const specIsChild = /детск|педиатр/i.test(specializationName);
     if (specIsChild && age >= 18) return false;
     if (!specIsChild && age < 18 && !isChild) {
       // Adult specialization picked by adult user → block minor patients.

@@ -34,10 +34,15 @@ export default function AuthGate() {
     if (!vkUserId) return;
     if (patientId) return;
     autoShareFiredRef.current = true;
-    // Fire after a short tick so the modal animates in first.
-    setTimeout(() => {
+    // Fire after a short tick so the modal animates in first. Track the
+    // timer so we can cancel it on unmount (avoids firing VK Bridge dialog
+    // after navigation away).
+    const timer = setTimeout(() => {
       handleVkBridgePhone();
     }, 400);
+    return () => {
+      clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, vkUserId, patientId]);
 

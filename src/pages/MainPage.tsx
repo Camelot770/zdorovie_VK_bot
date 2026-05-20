@@ -84,18 +84,29 @@ export default function MainPage() {
   const doctors = mainData?.doctors || [];
   const services = mainData?.services || [];
 
-  // Filter specializations by patient age (child <18, adult >=18) and exclude УЗИ
+  // Filter specializations by patient age (child <18, adult >=18) and exclude УЗИ.
+  //
+  // Default age range when 1С leaves ageFrom/ageTo empty:
+  //   - spec name has "детск/педиатр" → 0..17
+  //   - any other spec               → 18..120 (treat as adult-only)
+  // This prevents "Акушер-гинеколог", "Невролог", … from leaking into child mode.
   const specializations = useMemo(() => {
     const patientAge = isChild ? 10 : 30; // representative age for filtering
     return allSpecializations.filter((s) => {
-      // Exclude УЗИ specializations
       if (/узи|узд|ультразв/i.test(s.name)) return false;
-      let from = s.ageFrom ?? 0;
-      let to = s.ageTo ?? 999;
-      // Name-based fallback: if API didn't set age range but name says "Детский", treat as 0-17
-      if (from === 0 && to === 999 && /детск/i.test(s.name)) {
-        from = 0;
-        to = 17;
+      const apiFrom = s.ageFrom;
+      const apiTo = s.ageTo;
+      let from: number;
+      let to: number;
+      if (apiFrom == null && apiTo == null) {
+        if (/детск|педиатр/i.test(s.name)) {
+          from = 0; to = 17;
+        } else {
+          from = 18; to = 120;
+        }
+      } else {
+        from = apiFrom ?? 0;
+        to = apiTo ?? 120;
       }
       return patientAge >= from && patientAge <= to;
     });
@@ -104,22 +115,37 @@ export default function MainPage() {
   // Filter clinics: only show clinics that have doctors with age-matching specializations
   const filteredClinics = useMemo(() => {
     const patientAge = isChild ? 10 : 30;
-    // Build set of child specialization IDs by name for fallback
+    // Map specializationId → "is child spec by name fallback"
     const childSpecIds = new Set<string>();
+    const adultSpecIds = new Set<string>();
     for (const spec of allSpecializations) {
-      if (spec.ageFrom == null && spec.ageTo == null && /детск/i.test(spec.name)) {
-        childSpecIds.add(spec.id);
+      if (spec.ageFrom == null && spec.ageTo == null) {
+        if (/детск|педиатр/i.test(spec.name)) {
+          childSpecIds.add(spec.id);
+        } else {
+          adultSpecIds.add(spec.id);
+        }
       }
     }
     const clinicIdsWithDocs = new Set<string>();
     for (const doc of doctors) {
       for (const cl of doc.clinics || []) {
         for (const sp of cl.specializations || []) {
-          let from = sp.ageFrom ?? 0;
-          let to = sp.ageTo ?? 999;
-          if (from === 0 && to === 999 && childSpecIds.has(sp.specializationId)) {
-            from = 0;
-            to = 17;
+          const apiFrom = sp.ageFrom;
+          const apiTo = sp.ageTo;
+          let from: number;
+          let to: number;
+          if (apiFrom == null && apiTo == null) {
+            if (childSpecIds.has(sp.specializationId)) {
+              from = 0; to = 17;
+            } else if (adultSpecIds.has(sp.specializationId)) {
+              from = 18; to = 120;
+            } else {
+              from = 0; to = 120;
+            }
+          } else {
+            from = apiFrom ?? 0;
+            to = apiTo ?? 120;
           }
           if (patientAge >= from && patientAge <= to) {
             clinicIdsWithDocs.add(cl.clinicId);

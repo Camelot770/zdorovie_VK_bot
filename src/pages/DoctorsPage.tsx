@@ -198,15 +198,21 @@ export default function DoctorsPage() {
 
   let list = Array.isArray(doctors) ? doctors : [];
 
-  // Filter doctors by patient age when isChild flag is set
-  // Also filter out child-only doctors when NOT isChild (adult mode)
+  // Filter doctors by patient age. Defaults when 1С leaves ageFrom/ageTo blank:
+  //   - spec name has "детск/педиатр" → 0..17
+  //   - any other spec               → 18..120 (treat as adult-only)
+  // So adults never see kid-only doctors and kids never see adult-only doctors.
   {
     const patientAge = isChild ? 10 : 30;
-    // Detect child specializations by name when ageFrom/ageTo missing
-    const childSpecNames = new Set<string>();
+    const childSpecIds = new Set<string>();
+    const adultSpecIds = new Set<string>();
     for (const spec of specsData || []) {
-      if (spec.ageFrom == null && spec.ageTo == null && /детск/i.test(spec.name)) {
-        childSpecNames.add(spec.id);
+      if (spec.ageFrom == null && spec.ageTo == null) {
+        if (/детск|педиатр/i.test(spec.name)) {
+          childSpecIds.add(spec.id);
+        } else {
+          adultSpecIds.add(spec.id);
+        }
       }
     }
     if (specializationId) {
@@ -214,11 +220,46 @@ export default function DoctorsPage() {
         (d.clinics || []).some((cl) =>
           (cl.specializations || []).some((s) => {
             if (s.specializationId !== specializationId) return false;
-            let from = s.ageFrom ?? 0;
-            let to = s.ageTo ?? 999;
-            if (from === 0 && to === 999 && childSpecNames.has(s.specializationId)) {
-              from = 0;
-              to = 17;
+            const apiFrom = s.ageFrom;
+            const apiTo = s.ageTo;
+            let from: number;
+            let to: number;
+            if (apiFrom == null && apiTo == null) {
+              if (childSpecIds.has(s.specializationId)) {
+                from = 0; to = 17;
+              } else if (adultSpecIds.has(s.specializationId)) {
+                from = 18; to = 120;
+              } else {
+                from = 0; to = 120;
+              }
+            } else {
+              from = apiFrom ?? 0;
+              to = apiTo ?? 120;
+            }
+            return patientAge >= from && patientAge <= to;
+          })
+        )
+      );
+    } else {
+      // No spec selected — at least filter by patient age across all specs
+      list = list.filter((d) =>
+        (d.clinics || []).some((cl) =>
+          (cl.specializations || []).some((s) => {
+            const apiFrom = s.ageFrom;
+            const apiTo = s.ageTo;
+            let from: number;
+            let to: number;
+            if (apiFrom == null && apiTo == null) {
+              if (childSpecIds.has(s.specializationId)) {
+                from = 0; to = 17;
+              } else if (adultSpecIds.has(s.specializationId)) {
+                from = 18; to = 120;
+              } else {
+                from = 0; to = 120;
+              }
+            } else {
+              from = apiFrom ?? 0;
+              to = apiTo ?? 120;
             }
             return patientAge >= from && patientAge <= to;
           })

@@ -88,7 +88,7 @@ export default function ConfirmPage() {
   const ageWarning = (() => {
     const age = calcAge(patientBirthDate || "");
     if (age === null) return "";
-    const specIsChild = /детск/i.test(specializationName);
+    const specIsChild = /детск|педиатр/i.test(specializationName);
     if (specIsChild && age >= 18) {
       return "Выбрана детская специализация, но пациент старше 18 лет.";
     }

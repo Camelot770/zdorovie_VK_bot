@@ -684,7 +684,7 @@ export default function BookingWizardPage() {
             </div>
           </div>
           <p className="text-sm text-gray-600 leading-relaxed">
-            Чтобы записаться, сначала привяжите свой номер телефона. Мы отправим код подтверждения в SMS.
+            Чтобы записаться, сначала привяжите свой номер телефона через ВКонтакте.
           </p>
           <button
             onClick={() => navigate("/profile")}
@@ -725,7 +725,7 @@ export default function BookingWizardPage() {
       let from = s.ageFrom ?? 0;
       let to = s.ageTo ?? 999;
       // Name-based fallback: "Детский" in name → child-only (0-17)
-      if (from === 0 && to === 999 && /детск/i.test(s.name)) {
+      if (from === 0 && to === 999 && /детск|педиатр/i.test(s.name)) {
         from = 0;
         to = 17;
       }

@@ -215,7 +215,7 @@ export default function PatientSelectPage() {
         {/* Heading */}
         <div className="flex items-center gap-2 px-1">
           <Users className="w-4 h-4 text-primary-600" />
-          <h3 className="text-base font-bold text-gray-900">Кому записываемся?</h3>
+          <h3 className="text-base font-bold text-gray-900">Кого записываем?</h3>
         </div>
 
         {/* Patient list */}

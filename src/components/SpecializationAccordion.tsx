@@ -14,8 +14,11 @@ export default function SpecializationAccordion({
   onSelectSpec,
   loading = false,
 }: Props) {
-  // Only show specializations that have services
-  const visible = specializations.filter((s) => servicesBySpec[s.id]?.length);
+  // Show all specs passed in by the parent (already filtered by age + clinic).
+  // Specs without a known consultation price will simply render without the
+  // price line — better than hiding the spec entirely when 1С has a doctor
+  // for it but no matching "приём/консультация" service entry.
+  const visible = specializations;
 
   if (loading) {
     return (

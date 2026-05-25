@@ -17,6 +17,7 @@ import { useBookingStore } from "../store/booking";
 import { useAuth } from "../hooks/useAuth";
 import PageTransition from "../components/ui/PageTransition";
 import { calcAge, ageLabel } from "../utils/age";
+import { specNameIsPediatric, specNameIsAdultOnly } from "../utils/ageFilter";
 import type { Doctor, LinkedPatient, Specialization } from "../types";
 
 /**
@@ -97,14 +98,16 @@ export default function PatientSelectPage() {
       .then((pts) => {
         const list = pts || [];
         setPatients(list);
-        // If nothing chosen yet, suggest a sensible default that passes
-        // the age check. Ineligible patients are never auto-selected.
-        const specIsChildLocal = /детск|педиатр/i.test(specializationName);
+        // Eligibility: toggle + spec name. See isPatientEligible() below.
         const isEligible = (p: LinkedPatient): boolean => {
           const a = calcAge(p.birthDate || "");
           if (a === null) return true;
-          if (specIsChildLocal && a >= 18) return false;
-          if (!specIsChildLocal && a < 18 && !isChild) return false;
+          if (isChild && a >= 18) return false;
+          if (!isChild && a < 18) return false;
+          if (specializationName) {
+            if (specNameIsPediatric(specializationName) && a >= 18) return false;
+            if (specNameIsAdultOnly(specializationName) && a < 18) return false;
+          }
           return true;
         };
         setSelectedId((current) => {
@@ -137,16 +140,15 @@ export default function PatientSelectPage() {
     }
   }, [appointmentAt, navigate]);
 
-  /** Determine if a patient's age matches the chosen specialization. */
+  /** Determine if a patient's age matches both the toggle AND the spec/doctor. */
   function isPatientEligible(p: LinkedPatient): boolean {
     const age = calcAge(p.birthDate || "");
-    if (age === null) return true; // unknown age — let server validate
-    const specIsChild = /детск|педиатр/i.test(specializationName);
-    if (specIsChild && age >= 18) return false;
-    if (!specIsChild && age < 18 && !isChild) {
-      // Adult specialization picked by adult user → block minor patients.
-      // (If isChild=true, the user explicitly chose "for kid" mode, so this branch is moot.)
-      return false;
+    if (age === null) return true; // unknown age — let user decide
+    if (isChild && age >= 18) return false;
+    if (!isChild && age < 18) return false;
+    if (specializationName) {
+      if (specNameIsPediatric(specializationName) && age >= 18) return false;
+      if (specNameIsAdultOnly(specializationName) && age < 18) return false;
     }
     return true;
   }

@@ -84,88 +84,73 @@ export default function MainPage() {
   const doctors = mainData?.doctors || [];
   const services = mainData?.services || [];
 
-  // Two-pass spec filter:
-  //   1. Spec-level age check (hybrid: 1С ageFrom/ageTo, else name fallback).
-  //   2. AT LEAST ONE doctor at the (selected) clinic must offer this spec
-  //      AND that doctor's per-spec ageFrom/ageTo must accept patient age.
-  //      Without (2) the user could tap "Акушер-гинеколог" in child mode
-  //      and land on "Врачи не найдены".
+  // Per the clinic's own convention: a spec is "for kids" if at least one
+  // of its SERVICES has "детск/педиатр" in the service name. Conversely
+  // "for adults" if it has at least one service WITHOUT those markers.
+  // Services that don't classify clearly are ignored.
   //
-  // When the doctor list is still empty (initial load) we skip pass 2 so
-  // the user sees something while the data arrives.
+  // This is what the clinic itself uses to staff/route patients, so we
+  // mirror their rule and stop fighting with 1С ageFrom/ageTo which is
+  // frequently set to 0..120 for everyone.
   const specializations = useMemo(() => {
-    const patientAge = isChild ? 10 : 30;
-
-    const fitsAge = (apiFrom: number | null | undefined, apiTo: number | null | undefined, name: string): boolean => {
-      const hasChildName = /детск|педиатр/i.test(name);
-      if (apiFrom == null && apiTo == null) {
-        return hasChildName ? patientAge <= 17 : patientAge >= 18;
-      }
-      const from = apiFrom ?? 0;
-      const to = apiTo ?? 120;
-      // 1С sometimes records a generic spec ("Акушер-гинеколог") with a
-      // wide range (0..120) that covers both age groups. When neither
-      // ageFrom nor ageTo restricts to one group AND the name itself
-      // doesn't mention "детск/педиатр", trust the name and treat the
-      // spec as adult-only.
-      if (from <= 17 && to >= 18 && !hasChildName) {
-        return patientAge >= 18;
-      }
-      return patientAge >= from && patientAge <= to;
-    };
-
-    // Build a lookup of spec name by ID so we can use it for the doctor's
-    // per-spec age fallback (the doctor.clinics[].specializations[] entry
-    // only has the ID, not the name).
-    const specNameById = new Map<string, string>();
-    for (const s of allSpecializations) specNameById.set(s.id, s.name);
+    // Build serviceId → "is kid service by name" lookup
+    const serviceIsKid = new Map<string, boolean>();
+    for (const svc of services) {
+      if (!svc.name) continue;
+      serviceIsKid.set(svc.id, /детск|педиатр/i.test(svc.name));
+    }
 
     return allSpecializations.filter((s) => {
       if (/узи|узд|ультразв/i.test(s.name)) return false;
 
-      // Pass 1: spec-level age
-      if (!fitsAge(s.ageFrom, s.ageTo, s.name)) return false;
-
-      // Pass 2: at least one doctor exists with matching age at the
-      // (selected) clinic. Skip while doctors haven't loaded yet.
+      // Wait for doctor list to load
       if (!doctors || doctors.length === 0) return true;
 
+      // Find at least one (doctor, clinic, this spec) tuple offering a
+      // service whose name matches the current mode.
       for (const doc of doctors) {
         for (const cl of doc.clinics || []) {
           if (clinicId && cl.clinicId !== clinicId) continue;
           for (const sp of cl.specializations || []) {
             if (sp.specializationId !== s.id) continue;
-            const docSpecName = specNameById.get(sp.specializationId) || s.name;
-            if (fitsAge(sp.ageFrom, sp.ageTo, docSpecName)) {
-              return true;
+            for (const svc of sp.services || []) {
+              const kid = serviceIsKid.get(svc.serviceId);
+              if (kid === undefined) continue;
+              if (kid === isChild) return true;
             }
           }
         }
       }
       return false;
     });
-  }, [allSpecializations, isChild, clinicId, doctors]);
+  }, [allSpecializations, isChild, clinicId, doctors, services]);
 
   // Filter clinics: only those that have at least one doctor practising a
   // specialization matching the patient age (by name only).
   const filteredClinics = useMemo(() => {
-    const matchingSpecIds = new Set(
-      allSpecializations
-        .filter((s) => /детск|педиатр/i.test(s.name) === isChild)
-        .map((s) => s.id),
-    );
+    // Show clinic only if at least one doctor there offers a service
+    // matching the current mode (kid/adult by service name).
+    const serviceIsKid = new Map<string, boolean>();
+    for (const svc of services) {
+      if (!svc.name) continue;
+      serviceIsKid.set(svc.id, /детск|педиатр/i.test(svc.name));
+    }
     const clinicIdsWithDocs = new Set<string>();
     for (const doc of doctors) {
       for (const cl of doc.clinics || []) {
         for (const sp of cl.specializations || []) {
-          if (matchingSpecIds.has(sp.specializationId)) {
-            clinicIdsWithDocs.add(cl.clinicId);
+          for (const svc of sp.services || []) {
+            const kid = serviceIsKid.get(svc.serviceId);
+            if (kid === undefined) continue;
+            if (kid === isChild) {
+              clinicIdsWithDocs.add(cl.clinicId);
+            }
           }
         }
       }
     }
     return clinics.filter((c) => clinicIdsWithDocs.has(c.id));
-  }, [clinics, doctors, isChild, allSpecializations]);
+  }, [clinics, doctors, services, isChild]);
 
   // Reset clinic selection if current clinic is not in filtered list
   useEffect(() => {

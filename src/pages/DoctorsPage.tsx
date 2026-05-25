@@ -234,41 +234,31 @@ export default function DoctorsPage() {
   //    1С "ghost" doctors. We DON'T apply it as a hard requirement to
   //    avoid hiding legitimate doctors when /schedules returns empty.
   {
-    // Use the same hybrid age rule as MainPage so the two pages don't disagree
-    // about which specs belong to which group.
-    const patientAge = isChild ? 10 : 30;
-    const fitsAge = (apiFrom: number | null | undefined, apiTo: number | null | undefined, name: string): boolean => {
-      const hasChildName = /детск|педиатр/i.test(name);
-      if (apiFrom == null && apiTo == null) {
-        return hasChildName ? patientAge <= 17 : patientAge >= 18;
+    // Filter doctors by SERVICE NAMES (matches clinic's own routing logic).
+    // A doctor is "kid-friendly" if any of their services has "детск/педиатр"
+    // in the name, "adult-friendly" otherwise.
+    const serviceIsKid = new Map<string, boolean>();
+    for (const svc of servicesData || []) {
+      if (!svc.name) continue;
+      serviceIsKid.set(svc.id, /детск|педиатр/i.test(svc.name));
+    }
+
+    const doctorMatchesMode = (d: typeof list[number]): boolean => {
+      for (const cl of d.clinics || []) {
+        if (clinicId && cl.clinicId !== clinicId) continue;
+        for (const sp of cl.specializations || []) {
+          if (specializationId && sp.specializationId !== specializationId) continue;
+          for (const svc of sp.services || []) {
+            const kid = serviceIsKid.get(svc.serviceId);
+            if (kid === undefined) continue;
+            if (kid === isChild) return true;
+          }
+        }
       }
-      const from = apiFrom ?? 0;
-      const to = apiTo ?? 120;
-      if (from <= 17 && to >= 18 && !hasChildName) {
-        return patientAge >= 18;
-      }
-      return patientAge >= from && patientAge <= to;
+      return false;
     };
 
-    const matchingSpecIds = new Set(
-      (specsData || [])
-        .filter((s) => fitsAge(s.ageFrom, s.ageTo, s.name))
-        .map((s) => s.id),
-    );
-
-    if (specializationId && !matchingSpecIds.has(specializationId)) {
-      list = [];
-    } else if (!(clinicId && specializationId)) {
-      list = list.filter((d) =>
-        (d.clinics || []).some((cl) => {
-          if (clinicId && cl.clinicId !== clinicId) return false;
-          return (cl.specializations || []).some((s) => {
-            if (specializationId) return s.specializationId === specializationId;
-            return matchingSpecIds.has(s.specializationId);
-          });
-        }),
-      );
-    }
+    list = list.filter(doctorMatchesMode);
   }
 
   // Bonus filter: when schedules tell us about ghost doctors, prune them.

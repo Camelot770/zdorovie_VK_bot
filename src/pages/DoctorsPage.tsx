@@ -6,7 +6,7 @@ import { useApi } from "../hooks/useApi";
 import { useBookingStore } from "../store/booking";
 import { useFavoritesStore } from "../store/favorites";
 import { buildConsultPriceMap, getMinPrice } from "../utils/prices";
-import { buildDoctorAgeFlags } from "../utils/ageFilter";
+import { rangeOverlapsMode } from "../utils/ageFilter";
 import DoctorCard from "../components/DoctorCard";
 import PageTransition from "../components/ui/PageTransition";
 import SkeletonList from "../components/ui/SkeletonList";
@@ -235,23 +235,31 @@ export default function DoctorsPage() {
   //    1С "ghost" doctors. We DON'T apply it as a hard requirement to
   //    avoid hiding legitimate doctors when /schedules returns empty.
   {
-    // Per-doctor kid/adult flags based purely on 1С age ranges — no names.
-    const { docHasKid, docHasAdult } = buildDoctorAgeFlags(list);
+    // Filter doctors purely by 1С age ranges (no names).
+    //   1. If URL pins a specializationId AND that spec's global age range
+    //      doesn't overlap the current mode → no doctors shown.
+    //   2. Otherwise a doctor matches if at least one of their entries under
+    //      the URL-pinned (clinic, spec) has a range overlapping the mode.
+    const urlSpec =
+      specializationId && specsData
+        ? specsData.find((sp) => sp.id === specializationId)
+        : undefined;
+    const urlSpecBlocks =
+      urlSpec && !rangeOverlapsMode(urlSpec.ageFrom, urlSpec.ageTo, isChild);
 
     const doctorMatchesMode = (d: typeof list[number]): boolean => {
-      // Must actually practise at the selected (clinic, spec) — URL filters.
-      let practises = false;
+      if (urlSpecBlocks) return false;
       for (const cl of d.clinics || []) {
         if (clinicId && cl.clinicId !== clinicId) continue;
         for (const sp of cl.specializations || []) {
           if (specializationId && sp.specializationId !== specializationId) continue;
-          practises = true;
-          break;
+          if (rangeOverlapsMode(sp.ageFrom, sp.ageTo, isChild)) return true;
+          for (const svc of sp.services || []) {
+            if (rangeOverlapsMode(svc.ageFrom, svc.ageTo, isChild)) return true;
+          }
         }
-        if (practises) break;
       }
-      if (!practises) return false;
-      return isChild ? !!docHasKid.get(d.id) : !!docHasAdult.get(d.id);
+      return false;
     };
 
     list = list.filter(doctorMatchesMode);

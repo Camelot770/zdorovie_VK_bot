@@ -11,7 +11,7 @@ import DoctorSearch from "../components/DoctorSearch";
 import PageTransition from "../components/ui/PageTransition";
 import SkeletonCard from "../components/ui/SkeletonCard";
 import { groupServicesBySpecialization, collectServiceIds } from "../utils/prices";
-import { buildDoctorAgeFlags, specNameIsUltrasound } from "../utils/ageFilter";
+import { buildSpecAgeFlags, rangeOverlapsMode, specNameIsUltrasound } from "../utils/ageFilter";
 import type { Clinic, Specialization, Doctor, Service } from "../types";
 
 interface MainPageData {
@@ -85,48 +85,47 @@ export default function MainPage() {
   const doctors = mainData?.doctors || [];
   const services = mainData?.services || [];
 
-  // Spec/clinic visibility uses a per-doctor aggregate based purely on the
-  // 1С age ranges (ageFrom/ageTo) on per-(doctor,spec) and per-(doctor,svc)
-  // rows. No name-based routing. See utils/ageFilter.ts.
+  // Spec/clinic visibility uses two layers of 1С age ranges:
+  //   1. Global Specialization.ageFrom/ageTo (strict kid spec hidden in
+  //      adult mode, strict adult spec hidden in kid mode).
+  //   2. Per-(doctor, clinic, spec) and per-(doctor, ... , service) ranges
+  //      aggregated PER SPEC (not per doctor — see ageFilter.ts).
+  // No name-based routing.
   const specializations = useMemo(() => {
-    const { docHasKid, docHasAdult } = buildDoctorAgeFlags(doctors);
+    const { specHasKid, specHasAdult } = buildSpecAgeFlags(doctors, clinicId || undefined);
 
     return allSpecializations.filter((s) => {
       if (specNameIsUltrasound(s.name)) return false;
+      if (!rangeOverlapsMode(s.ageFrom, s.ageTo, isChild)) return false;
       if (!doctors || doctors.length === 0) return true;
-
-      // Show if at least one practising doctor (at the optional selected
-      // clinic) has age ranges matching the current mode.
-      for (const doc of doctors) {
-        let practises = false;
-        for (const cl of doc.clinics || []) {
-          if (clinicId && cl.clinicId !== clinicId) continue;
-          for (const sp of cl.specializations || []) {
-            if (sp.specializationId === s.id) {
-              practises = true;
-              break;
-            }
-          }
-          if (practises) break;
-        }
-        if (!practises) continue;
-        if (isChild && docHasKid.get(doc.id)) return true;
-        if (!isChild && docHasAdult.get(doc.id)) return true;
-      }
-      return false;
+      return isChild ? !!specHasKid.get(s.id) : !!specHasAdult.get(s.id);
     });
   }, [allSpecializations, isChild, clinicId, doctors]);
 
   // Filter clinics: only those that have at least one doctor practising a
   // specialization matching the patient age (by name only).
   const filteredClinics = useMemo(() => {
-    const { docHasKid, docHasAdult } = buildDoctorAgeFlags(doctors);
     const clinicIdsWithDocs = new Set<string>();
     for (const doc of doctors) {
-      const matches = isChild ? docHasKid.get(doc.id) : docHasAdult.get(doc.id);
-      if (!matches) continue;
       for (const cl of doc.clinics || []) {
-        clinicIdsWithDocs.add(cl.clinicId);
+        if (clinicIdsWithDocs.has(cl.clinicId)) continue;
+        for (const sp of cl.specializations || []) {
+          if (rangeOverlapsMode(sp.ageFrom, sp.ageTo, isChild)) {
+            clinicIdsWithDocs.add(cl.clinicId);
+            break;
+          }
+          let svcMatch = false;
+          for (const svc of sp.services || []) {
+            if (rangeOverlapsMode(svc.ageFrom, svc.ageTo, isChild)) {
+              svcMatch = true;
+              break;
+            }
+          }
+          if (svcMatch) {
+            clinicIdsWithDocs.add(cl.clinicId);
+            break;
+          }
+        }
       }
     }
     return clinics.filter((c) => clinicIdsWithDocs.has(c.id));

@@ -1,51 +1,62 @@
 import type { Doctor } from "../types";
 
+/** A range [ageFrom..ageTo] overlaps the kid band [0..17] iff its lower bound ≤ 17. */
+export function rangeOverlapsKid(ageFrom?: number, _ageTo?: number): boolean {
+  const lo = ageFrom ?? 0;
+  return lo <= 17;
+}
+
+/** A range [ageFrom..ageTo] overlaps the adult band [18..120] iff its upper bound ≥ 18. */
+export function rangeOverlapsAdult(_ageFrom?: number, ageTo?: number): boolean {
+  const hi = ageTo ?? 120;
+  return hi >= 18;
+}
+
+export function rangeOverlapsMode(
+  ageFrom: number | undefined,
+  ageTo: number | undefined,
+  isChild: boolean
+): boolean {
+  return isChild ? rangeOverlapsKid(ageFrom, ageTo) : rangeOverlapsAdult(ageFrom, ageTo);
+}
+
 /**
- * Aggregate per-doctor kid/adult flags purely from 1С age ranges (no names).
+ * Per-SPEC aggregation across all (doctor, clinic, spec) and (…, service)
+ * rows. A spec is "kid-eligible" if ANY of its rows has a range that overlaps
+ * the kid band; mirror for "adult-eligible". Optionally restrict to one clinicId.
  *
- * For every (doctor, clinic, spec) and each of its (service) entries we look
- * at ageFrom/ageTo. A range overlaps "kid" mode if its lower bound is ≤ 17;
- * it overlaps "adult" mode if its upper bound is ≥ 18. Undefined bounds
- * default to 0 / 120 (open-ended).
- *
- * A doctor may end up with both flags set (mixed practice — visible in both
- * modes). A doctor with no age data at all defaults to adult so they still
- * appear somewhere.
+ * IMPORTANT: per-doctor aggregation (across the doctor's other specs) would
+ * leak — a single doctor practising both "Кардиолог" (adult) and "Детский
+ * кардиолог" (kid) would end up tagged as both, polluting both specs.
+ * Aggregating per (doctor, clinic, spec) row instead keeps each spec independent.
  */
-export function buildDoctorAgeFlags(doctors: Doctor[]): {
-  docHasKid: Map<string, boolean>;
-  docHasAdult: Map<string, boolean>;
+export function buildSpecAgeFlags(
+  doctors: Doctor[],
+  clinicId?: string
+): {
+  specHasKid: Map<string, boolean>;
+  specHasAdult: Map<string, boolean>;
 } {
-  const docHasKid = new Map<string, boolean>();
-  const docHasAdult = new Map<string, boolean>();
+  const specHasKid = new Map<string, boolean>();
+  const specHasAdult = new Map<string, boolean>();
 
   for (const doc of doctors) {
-    let hasKid = false;
-    let hasAdult = false;
-
     for (const cl of doc.clinics || []) {
+      if (clinicId && cl.clinicId !== clinicId) continue;
       for (const sp of cl.specializations || []) {
+        const sid = sp.specializationId;
         // Per-(doctor, clinic, spec) range
-        const spLo = sp.ageFrom ?? 0;
-        const spHi = sp.ageTo ?? 120;
-        if (spLo <= 17) hasKid = true;
-        if (spHi >= 18) hasAdult = true;
-
+        if (rangeOverlapsKid(sp.ageFrom, sp.ageTo)) specHasKid.set(sid, true);
+        if (rangeOverlapsAdult(sp.ageFrom, sp.ageTo)) specHasAdult.set(sid, true);
         // Per-(doctor, clinic, spec, service) range
         for (const svc of sp.services || []) {
-          const svcLo = svc.ageFrom ?? 0;
-          const svcHi = svc.ageTo ?? 120;
-          if (svcLo <= 17) hasKid = true;
-          if (svcHi >= 18) hasAdult = true;
+          if (rangeOverlapsKid(svc.ageFrom, svc.ageTo)) specHasKid.set(sid, true);
+          if (rangeOverlapsAdult(svc.ageFrom, svc.ageTo)) specHasAdult.set(sid, true);
         }
       }
     }
-    if (!hasKid && !hasAdult) hasAdult = true;
-    docHasKid.set(doc.id, hasKid);
-    docHasAdult.set(doc.id, hasAdult);
   }
-
-  return { docHasKid, docHasAdult };
+  return { specHasKid, specHasAdult };
 }
 
 /** Hide pure ultrasound/diagnostic specs from spec list (not age-related). */

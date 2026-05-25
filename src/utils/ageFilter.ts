@@ -90,6 +90,12 @@ export function specShowsInMode(
   if (isStrictKid(spec.ageFrom, spec.ageTo)) return isChild;
   if (isStrictAdult(spec.ageFrom, spec.ageTo)) return !isChild;
 
+  // SAFETY NET: if doctor data is structurally empty (no specs found in
+  // any doctor's clinics — e.g. 1С response format changed or doctors list
+  // hasn't fully hydrated), fall back to permissive: show in adult mode,
+  // hide in kid mode. Better than catastrophically empty spec list.
+  if (flags.specHasAnyEntry.size === 0) return !isChild;
+
   // 3. Per-spec aggregation.
   if (!flags.specHasAnyEntry.get(spec.id)) return false;
 

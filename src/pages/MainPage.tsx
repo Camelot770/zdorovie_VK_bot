@@ -98,17 +98,18 @@ export default function MainPage() {
   // No name-based routing.
   const specializations = useMemo(() => {
     const flags = buildSpecAgeFlags(doctors, clinicId || undefined);
-    // Procedure-only specs (Колоноскопия, Массажист, Маммография, ...)
-    // have no "приём/консультация" service and aren't bookable through
-    // this app. Hide them entirely — but ONLY when service data has
-    // actually loaded (otherwise we'd hide everything during the loading
-    // gap between doctors arriving and services arriving).
+    // Procedure-only specs (Колоноскопия, Массажист, Маммография, ...) have
+    // no "приём/консультация" service and aren't bookable through this app.
+    // Hide them entirely — but ONLY when both:
+    //   • service data has actually loaded, AND
+    //   • the regex actually matched at least one service (otherwise the
+    //     clinic uses different naming and we'd hide everything).
     const consultSpecs = findSpecsWithConsult(doctors, services, clinicId || undefined);
-    const haveServices = services.length > 0;
+    const useConsultFilter = services.length > 0 && consultSpecs.size > 0;
     return allSpecializations.filter((s) => {
       if (specNameIsUltrasound(s.name)) return false;
       if (!doctors || doctors.length === 0) return true;
-      if (haveServices && !consultSpecs.has(s.id)) return false;
+      if (useConsultFilter && !consultSpecs.has(s.id)) return false;
       return specShowsInMode(s, flags, isChild);
     });
   }, [allSpecializations, isChild, clinicId, doctors, services]);

@@ -241,22 +241,35 @@ export default function DoctorsPage() {
   //    avoid hiding legitimate doctors when /schedules returns empty.
   {
     // Filter doctors (see utils/ageFilter.ts).
-    // First check the URL-pinned spec's name + global age — explicit
-    // "Детский ..." / "Педиатр" or strict range hides everything immediately.
+    // Inspect the URL-pinned spec to decide the strategy.
     const urlSpec =
       specializationId && specsData
         ? specsData.find((sp) => sp.id === specializationId)
         : undefined;
-    let urlSpecBlocks = false;
-    if (urlSpec) {
-      if (specNameIsPediatric(urlSpec.name) && !isChild) urlSpecBlocks = true;
-      if (isStrictKid(urlSpec.ageFrom, urlSpec.ageTo) && !isChild) urlSpecBlocks = true;
-      if (isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo) && isChild) urlSpecBlocks = true;
-    }
+    const urlSpecIsKid =
+      urlSpec &&
+      (specNameIsPediatric(urlSpec.name) || isStrictKid(urlSpec.ageFrom, urlSpec.ageTo));
+    const urlSpecIsAdult = urlSpec && isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo);
 
-    if (urlSpecBlocks) {
+    // Mode mismatch with the URL spec → empty list.
+    if ((urlSpecIsKid && !isChild) || (urlSpecIsAdult && isChild)) {
       list = [];
+    } else if (urlSpecIsKid || urlSpecIsAdult) {
+      // The spec itself already enforces the mode (by name or strict global
+      // age). Per-doctor age data is mostly wide and unreliable, so just
+      // show every doctor who practises this (clinic, spec).
+      list = list.filter((d) => {
+        for (const cl of d.clinics || []) {
+          if (clinicId && cl.clinicId !== clinicId) continue;
+          for (const sp of cl.specializations || []) {
+            if (specializationId && sp.specializationId !== specializationId) continue;
+            return true;
+          }
+        }
+        return false;
+      });
     } else {
+      // Generic spec (or no spec pinned) — fall back to strict per-doctor rules.
       list = list.filter((d) =>
         doctorShowsInMode(d, clinicId || undefined, specializationId || undefined, isChild)
       );

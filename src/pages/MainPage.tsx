@@ -10,7 +10,7 @@ import SpecializationAccordion from "../components/SpecializationAccordion";
 import DoctorSearch from "../components/DoctorSearch";
 import PageTransition from "../components/ui/PageTransition";
 import SkeletonCard from "../components/ui/SkeletonCard";
-import { groupServicesBySpecialization, collectServiceIds } from "../utils/prices";
+import { groupServicesBySpecialization, collectServiceIds, findSpecsWithConsult } from "../utils/prices";
 import {
   buildSpecAgeFlags,
   specShowsInMode,
@@ -98,12 +98,17 @@ export default function MainPage() {
   // No name-based routing.
   const specializations = useMemo(() => {
     const flags = buildSpecAgeFlags(doctors, clinicId || undefined);
+    // Procedure-only specs (Колоноскопия, Массажист, Маммография, ...)
+    // have no "приём/консультация" service and aren't bookable through
+    // this app. Hide them entirely.
+    const consultSpecs = findSpecsWithConsult(doctors, services, clinicId || undefined);
     return allSpecializations.filter((s) => {
       if (specNameIsUltrasound(s.name)) return false;
       if (!doctors || doctors.length === 0) return true;
+      if (!consultSpecs.has(s.id)) return false;
       return specShowsInMode(s, flags, isChild);
     });
-  }, [allSpecializations, isChild, clinicId, doctors]);
+  }, [allSpecializations, isChild, clinicId, doctors, services]);
 
   // Filter clinics: only those that have at least one doctor practising a
   // specialization matching the patient age (by name only).

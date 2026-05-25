@@ -84,9 +84,6 @@ export function buildConsultPriceMap(services: Service[]): Map<string, number> {
 }
 
 /**
- * Find the minimum service price for a doctor, optionally filtered by clinic/specialization.
- */
-/**
  * Group consultation services by specializationId.
  * Aggregates from doctor → clinics → specializations → services,
  * then maps to full Service objects filtered by CONSULT_RE.
@@ -96,7 +93,6 @@ export function groupServicesBySpecialization(
   services: Service[],
   clinicId?: string
 ): Record<string, Service[]> {
-  // 1. Build serviceId → Service lookup (primary consultations preferred)
   const primaryLookup = new Map<string, Service>();
   const anyLookup = new Map<string, Service>();
   for (const svc of services) {
@@ -107,10 +103,8 @@ export function groupServicesBySpecialization(
       }
     }
   }
-  // Use both lookups — prefer primary per specialization, fall back to any
   const svcLookup = new Map([...anyLookup, ...primaryLookup]);
 
-  // 2. Collect serviceIds per specializationId from doctor data
   const specSvcIds: Record<string, Set<string>> = {};
   for (const doc of doctors) {
     for (const cl of doc.clinics || []) {
@@ -127,7 +121,6 @@ export function groupServicesBySpecialization(
     }
   }
 
-  // 3. Map to Service objects, sort by price
   const result: Record<string, Service[]> = {};
   for (const [specId, ids] of Object.entries(specSvcIds)) {
     const svcs = Array.from(ids)
@@ -137,6 +130,43 @@ export function groupServicesBySpecialization(
     if (svcs.length > 0) result[specId] = svcs;
   }
 
+  return result;
+}
+
+/**
+ * Returns the set of specialization IDs that have at least one consultation
+ * service ("приём" / "консультация") under any doctor in the (optional) clinic.
+ *
+ * Used to hide procedure-only specs ("Колоноскопия", "Массажист",
+ * "Маммография" …) from the booking list — the app is for appointment
+ * bookings only, not arbitrary procedures.
+ */
+export function findSpecsWithConsult(
+  doctors: Doctor[],
+  services: Service[],
+  clinicId?: string
+): Set<string> {
+  const consultServiceIds = new Set<string>();
+  for (const svc of services) {
+    if (svc.price != null && svc.price > 0 && CONSULT_RE.test(svc.name || "")) {
+      consultServiceIds.add(svc.id);
+    }
+  }
+  const result = new Set<string>();
+  for (const doc of doctors) {
+    for (const cl of doc.clinics || []) {
+      if (clinicId && cl.clinicId !== clinicId) continue;
+      for (const sp of cl.specializations || []) {
+        if (result.has(sp.specializationId)) continue;
+        for (const svc of sp.services || []) {
+          if (consultServiceIds.has(svc.serviceId)) {
+            result.add(sp.specializationId);
+            break;
+          }
+        }
+      }
+    }
+  }
   return result;
 }
 

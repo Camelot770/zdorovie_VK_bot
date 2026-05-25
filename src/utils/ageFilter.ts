@@ -45,12 +45,24 @@ export function buildSpecAgeFlags(
       for (const sp of cl.specializations || []) {
         const sid = sp.specializationId;
         specHasAnyEntry.set(sid, true);
-        // Signal taken ONLY from the (doctor, clinic, spec) row — not from
-        // the doctor's services. Service-level age ranges are noisy: a
-        // gyn might have a teenage-pregnancy diagnostic service with
-        // ageTo<18, which would falsely flag her as a pediatric doctor.
-        if (isStrictKid(sp.ageFrom, sp.ageTo)) specStrictKid.set(sid, true);
-        if (isStrictAdult(sp.ageFrom, sp.ageTo)) specStrictAdult.set(sid, true);
+
+        const specIsStrictKid = isStrictKid(sp.ageFrom, sp.ageTo);
+        const specIsStrictAdult = isStrictAdult(sp.ageFrom, sp.ageTo);
+        if (specIsStrictKid) specStrictKid.set(sid, true);
+        if (specIsStrictAdult) specStrictAdult.set(sid, true);
+
+        // Service-level signals — guarded: a strictly-adult spec
+        // (e.g. Акушер-гинеколог with ageFrom>=18) might have one rogue
+        // service with ageTo<18 (teenage pregnancy diagnostic etc.); that
+        // signal must NOT flip the whole doctor / spec into kid mode.
+        for (const svc of sp.services || []) {
+          if (!specIsStrictAdult && isStrictKid(svc.ageFrom, svc.ageTo)) {
+            specStrictKid.set(sid, true);
+          }
+          if (!specIsStrictKid && isStrictAdult(svc.ageFrom, svc.ageTo)) {
+            specStrictAdult.set(sid, true);
+          }
+        }
       }
     }
   }
@@ -129,10 +141,22 @@ export function doctorShowsInMode(
     for (const sp of cl.specializations || []) {
       if (specializationId && sp.specializationId !== specializationId) continue;
       hasAnyEntry = true;
-      // Signal taken ONLY from the (doctor, clinic, spec) row — see comment
-      // in buildSpecAgeFlags about why service-level ranges are not used.
-      if (isStrictKid(sp.ageFrom, sp.ageTo)) hasStrictKid = true;
-      if (isStrictAdult(sp.ageFrom, sp.ageTo)) hasStrictAdult = true;
+
+      const specIsStrictKid = isStrictKid(sp.ageFrom, sp.ageTo);
+      const specIsStrictAdult = isStrictAdult(sp.ageFrom, sp.ageTo);
+      if (specIsStrictKid) hasStrictKid = true;
+      if (specIsStrictAdult) hasStrictAdult = true;
+
+      // Same guard as in buildSpecAgeFlags: service signals are masked
+      // if the spec row itself is strictly the opposite mode.
+      for (const svc of sp.services || []) {
+        if (!specIsStrictAdult && isStrictKid(svc.ageFrom, svc.ageTo)) {
+          hasStrictKid = true;
+        }
+        if (!specIsStrictKid && isStrictAdult(svc.ageFrom, svc.ageTo)) {
+          hasStrictAdult = true;
+        }
+      }
     }
   }
 

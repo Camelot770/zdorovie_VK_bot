@@ -80,7 +80,7 @@ export default function MainPage() {
   } = useBookingStore();
 
   // Single call with automatic fallback to individual endpoints
-  const { data: mainData, loading } = useApi<MainPageData>(
+  const { data: mainData, loading, error, refetch } = useApi<MainPageData>(
     fetchMainPageData,
     []
   );
@@ -215,6 +215,19 @@ export default function MainPage() {
             <SkeletonCard lines={1} />
             <SkeletonCard lines={1} />
             <SkeletonCard lines={1} />
+          </div>
+        ) : error || (!loading && allSpecializations.length === 0) ? (
+          <div className="bg-white rounded-xl border border-amber-200 p-4 text-center space-y-3">
+            <p className="text-sm text-gray-700">
+              ⚠ Не удалось загрузить специальности.
+            </p>
+            <button
+              type="button"
+              onClick={refetch}
+              className="text-sm font-medium text-primary-600 hover:text-primary-700"
+            >
+              Повторить
+            </button>
           </div>
         ) : (
           <SpecializationAccordion

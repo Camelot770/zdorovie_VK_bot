@@ -11,6 +11,7 @@ import {
   isStrictKid,
   isStrictAdult,
   specNameIsPediatric,
+  specNameIsAdultOnly,
 } from "../utils/ageFilter";
 import DoctorCard from "../components/DoctorCard";
 import PageTransition from "../components/ui/PageTransition";
@@ -249,7 +250,9 @@ export default function DoctorsPage() {
     const urlSpecIsKid =
       urlSpec &&
       (specNameIsPediatric(urlSpec.name) || isStrictKid(urlSpec.ageFrom, urlSpec.ageTo));
-    const urlSpecIsAdult = urlSpec && isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo);
+    const urlSpecIsAdult =
+      urlSpec &&
+      (specNameIsAdultOnly(urlSpec.name) || isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo));
 
     // Mode mismatch with the URL spec → empty list.
     if ((urlSpecIsKid && !isChild) || (urlSpecIsAdult && isChild)) {

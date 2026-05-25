@@ -74,6 +74,15 @@ export function specNameIsPediatric(name: string): boolean {
   return /детск|педиатр/i.test(name);
 }
 
+/** Spec name implies adult-only practice (no pediatric form exists in real life).
+ *  Examples: пластический хирург, акушер-гинеколог, репродуктолог, маммолог,
+ *  андролог, геронтолог. These are virtually never available for under-18s.
+ *  Note: this only fires when the name doesn't ALSO contain a pediatric marker
+ *  (specNameIsPediatric is checked first elsewhere). */
+export function specNameIsAdultOnly(name: string): boolean {
+  return /пластическ|акушер|гинеколог|андролог|маммолог|репродуктолог|геронтолог|сексолог|нарколог/i.test(name);
+}
+
 /**
  * Whether a Specialization should appear in the current mode.
  *
@@ -97,6 +106,10 @@ export function specShowsInMode(
 ): boolean {
   // 1. Explicit pediatric name wins outright.
   if (specNameIsPediatric(spec.name)) return isChild;
+
+  // 1b. Explicit adult-only name (Акушер-гинеколог, Пластический хирург,
+  // Маммолог, …) — hide from kid mode regardless of data.
+  if (specNameIsAdultOnly(spec.name)) return !isChild;
 
   // 2. Strict global age range.
   if (isStrictKid(spec.ageFrom, spec.ageTo)) return isChild;

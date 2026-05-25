@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   User,
@@ -11,12 +11,13 @@ import {
   Phone,
   ChevronRight,
 } from "lucide-react";
-import { apiGetFresh, apiPost } from "../api/client";
+import { apiGet, apiGetFresh, apiPost } from "../api/client";
+import { useApi } from "../hooks/useApi";
 import { useBookingStore } from "../store/booking";
 import { useAuth } from "../hooks/useAuth";
 import PageTransition from "../components/ui/PageTransition";
 import { calcAge, ageLabel } from "../utils/age";
-import type { LinkedPatient } from "../types";
+import type { Doctor, LinkedPatient, Specialization } from "../types";
 
 /**
  * Dedicated patient-selection step between SlotsPage and ConfirmPage.
@@ -27,15 +28,46 @@ export default function PatientSelectPage() {
   const navigate = useNavigate();
   const { maxUserId } = useAuth();
   const {
+    doctorId,
     doctorName,
-    specializationName,
+    clinicId,
     clinicName,
+    specializationName,
     appointmentAt,
     isChild,
     patientId: storePatientId,
     patientName: storePatientName,
     setPatientId,
   } = useBookingStore();
+
+  // Fetch the doctor + spec list so we can show ALL specs the doctor
+  // practises at the current clinic (not just the one auto-picked by the
+  // schedule lookup).
+  const { data: doctorData } = useApi<Doctor>(
+    () => (doctorId ? apiGet(`/doctors/${doctorId}`, { include: "specializations" }) : Promise.resolve(null as unknown as Doctor)),
+    [doctorId]
+  );
+  const { data: specsData } = useApi<Specialization[]>(
+    () => apiGet("/specializations"),
+    []
+  );
+
+  const doctorSpecNames = useMemo(() => {
+    if (!doctorData || !Array.isArray(specsData)) {
+      return specializationName ? [specializationName] : [];
+    }
+    const ids = new Set<string>();
+    for (const cl of doctorData.clinics || []) {
+      if (clinicId && cl.clinicId !== clinicId) continue;
+      for (const sp of cl.specializations || []) {
+        ids.add(sp.specializationId);
+      }
+    }
+    const names = specsData
+      .filter((s) => ids.has(s.id))
+      .map((s) => s.name);
+    return names.length > 0 ? names : (specializationName ? [specializationName] : []);
+  }, [doctorData, specsData, clinicId, specializationName]);
 
   const [patients, setPatients] = useState<LinkedPatient[]>([]);
   const [loading, setLoading] = useState(false);
@@ -203,8 +235,13 @@ export default function PatientSelectPage() {
           <div className="relative z-10">
             <p className="text-[11px] text-white/70 uppercase tracking-wider mb-1">Запись</p>
             <h2 className="text-[15px] font-bold leading-tight">{doctorName || "Врач"}</h2>
-            <p className="text-[12px] text-white/80 mt-1">
-              {[specializationName, dateStr, timeStr].filter(Boolean).join(" · ")}
+            {doctorSpecNames.length > 0 && (
+              <p className="text-[12px] text-white/80 mt-1">
+                {doctorSpecNames.join(", ")}
+              </p>
+            )}
+            <p className="text-[12px] text-white/80 mt-0.5">
+              {[dateStr, timeStr].filter(Boolean).join(" · ")}
             </p>
             {clinicName && (
               <p className="text-[11px] text-white/70 mt-0.5">{clinicName}</p>

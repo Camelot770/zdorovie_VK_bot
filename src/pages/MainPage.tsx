@@ -108,9 +108,13 @@ export default function MainPage() {
     const useConsultFilter = services.length > 0 && consultSpecs.size > 0;
     return allSpecializations.filter((s) => {
       if (specNameIsUltrasound(s.name)) return false;
-      if (!doctors || doctors.length === 0) return true;
+      // specShowsInMode handles every case including empty doctor data — it
+      // has its own safety net. Do NOT short-circuit on doctors.length===0
+      // here, otherwise "Детский кардиолог" leaks into adult mode while
+      // the doctors list is still loading.
+      if (!specShowsInMode(s, flags, isChild)) return false;
       if (useConsultFilter && !consultSpecs.has(s.id)) return false;
-      return specShowsInMode(s, flags, isChild);
+      return true;
     });
   }, [allSpecializations, isChild, clinicId, doctors, services]);
 

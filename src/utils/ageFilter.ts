@@ -58,10 +58,18 @@ export function buildSpecAgeFlags(
 }
 
 /**
- * Whether a Specialization should appear in the current mode. Combines:
- *   1. Global Specialization.ageFrom/ageTo (strict → trust it).
- *   2. Per-spec aggregation from doctor data (strict signal wins).
- *   3. Fallback: permissive (no info anywhere → show).
+ * Whether a Specialization should appear in the current mode.
+ *
+ * Asymmetric rule because 1С data is mostly wide (0..120):
+ *   • Kid mode is STRICT — only show specs with at least one strict kid
+ *     signal (ageTo < 18 globally, or under some doctor's entries).
+ *   • Adult mode is PERMISSIVE — show everything EXCEPT specs that are
+ *     strictly kid (have a kid signal AND no adult signal).
+ *
+ * Without this asymmetry, wide-everywhere data leaks adult specs into kid
+ * mode (and pediatric specs into adult mode). The clinic populates kid
+ * markers for genuinely pediatric specs; anything without markers we
+ * assume is adult-or-mixed.
  */
 export function specShowsInMode(
   spec: Specialization,
@@ -72,7 +80,7 @@ export function specShowsInMode(
   },
   isChild: boolean
 ): boolean {
-  // Strict global age range → trust it.
+  // Strict global age range → trust it absolutely.
   if (isStrictKid(spec.ageFrom, spec.ageTo)) return isChild;
   if (isStrictAdult(spec.ageFrom, spec.ageTo)) return !isChild;
 
@@ -82,18 +90,19 @@ export function specShowsInMode(
   const strictKid = flags.specStrictKid.get(spec.id) === true;
   const strictAdult = flags.specStrictAdult.get(spec.id) === true;
 
-  // Any strict signal exists for this spec → trust signals (mixed = both).
-  if (strictKid || strictAdult) {
-    return isChild ? strictKid : strictAdult;
+  if (isChild) {
+    // Kid mode: only show if at least one strict kid signal exists.
+    return strictKid;
   }
-  // No strict signal anywhere — wide data only. Show in both modes.
-  return true;
+  // Adult mode: hide ONLY if spec is strictly kid (kid signal AND no adult).
+  return !(strictKid && !strictAdult);
 }
 
 /**
  * Whether a Doctor should appear in the current mode under the optional
- * URL-pinned (clinicId, specializationId). Same strict-signal rule as
- * specShowsInMode, but scoped to that doctor's own entries.
+ * URL-pinned (clinicId, specializationId). Mirror of specShowsInMode:
+ *   • Kid mode strict (require strict kid signal).
+ *   • Adult mode permissive but excludes strictly-kid doctors.
  */
 export function doctorShowsInMode(
   doctor: Doctor,
@@ -120,10 +129,10 @@ export function doctorShowsInMode(
   }
 
   if (!hasAnyEntry) return false;
-  if (hasStrictKid || hasStrictAdult) {
-    return isChild ? hasStrictKid : hasStrictAdult;
+  if (isChild) {
+    return hasStrictKid;
   }
-  return true; // no strict signal — permissive
+  return !(hasStrictKid && !hasStrictAdult);
 }
 
 /** Hide pure ultrasound/diagnostic specs from spec list (not age-related). */

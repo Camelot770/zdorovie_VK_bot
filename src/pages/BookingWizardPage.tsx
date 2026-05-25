@@ -717,20 +717,18 @@ export default function BookingWizardPage() {
       );
     }
 
-    // HYBRID mode: respect 1С age range when set, name fallback otherwise.
+    // Hybrid age rule with wide-range override (matches MainPage).
     const patientAge = bookingStore.isChild ? 10 : 30;
     const specs = (specializations || []).filter((s) => {
       if (/узи|узд|ультразв/i.test(s.name)) return false;
-      const apiFrom = s.ageFrom;
-      const apiTo = s.ageTo;
-      let from: number;
-      let to: number;
-      if (apiFrom == null && apiTo == null) {
-        if (/детск|педиатр/i.test(s.name)) { from = 0; to = 17; }
-        else { from = 18; to = 120; }
-      } else {
-        from = apiFrom ?? 0;
-        to = apiTo ?? 120;
+      const hasChildName = /детск|педиатр/i.test(s.name);
+      if (s.ageFrom == null && s.ageTo == null) {
+        return hasChildName ? patientAge <= 17 : patientAge >= 18;
+      }
+      const from = s.ageFrom ?? 0;
+      const to = s.ageTo ?? 120;
+      if (from <= 17 && to >= 18 && !hasChildName) {
+        return patientAge >= 18;
       }
       return patientAge >= from && patientAge <= to;
     });

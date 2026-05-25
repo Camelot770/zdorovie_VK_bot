@@ -84,20 +84,23 @@ export default function MainPage() {
   const doctors = mainData?.doctors || [];
   const services = mainData?.services || [];
 
-  // HYBRID mode for age matching:
-  //   - 1С ageFrom/ageTo explicit → use those bounds
-  //   - both blank → fallback by name (детск/педиатр → 0..17, else 18..120)
-  // Plus: if clinic selected, also require at least one doctor at that clinic.
+  // Two-pass spec filter:
+  //   1. Spec-level age check (hybrid: 1С ageFrom/ageTo, else name fallback).
+  //   2. AT LEAST ONE doctor at the (selected) clinic must offer this spec
+  //      AND that doctor's per-spec ageFrom/ageTo must accept patient age.
+  //      Without (2) the user could tap "Акушер-гинеколог" in child mode
+  //      and land on "Врачи не найдены".
+  //
+  // When the doctor list is still empty (initial load) we skip pass 2 so
+  // the user sees something while the data arrives.
   const specializations = useMemo(() => {
     const patientAge = isChild ? 10 : 30;
-    let list = allSpecializations.filter((s) => {
-      if (/узи|узд|ультразв/i.test(s.name)) return false;
-      const apiFrom = s.ageFrom;
-      const apiTo = s.ageTo;
+
+    const fitsAge = (apiFrom: number | null | undefined, apiTo: number | null | undefined, name: string): boolean => {
       let from: number;
       let to: number;
       if (apiFrom == null && apiTo == null) {
-        if (/детск|педиатр/i.test(s.name)) {
+        if (/детск|педиатр/i.test(name)) {
           from = 0; to = 17;
         } else {
           from = 18; to = 120;
@@ -107,22 +110,38 @@ export default function MainPage() {
         to = apiTo ?? 120;
       }
       return patientAge >= from && patientAge <= to;
-    });
+    };
 
-    if (clinicId) {
-      const availableSpecIds = new Set<string>();
+    // Build a lookup of spec name by ID so we can use it for the doctor's
+    // per-spec age fallback (the doctor.clinics[].specializations[] entry
+    // only has the ID, not the name).
+    const specNameById = new Map<string, string>();
+    for (const s of allSpecializations) specNameById.set(s.id, s.name);
+
+    return allSpecializations.filter((s) => {
+      if (/узи|узд|ультразв/i.test(s.name)) return false;
+
+      // Pass 1: spec-level age
+      if (!fitsAge(s.ageFrom, s.ageTo, s.name)) return false;
+
+      // Pass 2: at least one doctor exists with matching age at the
+      // (selected) clinic. Skip while doctors haven't loaded yet.
+      if (!doctors || doctors.length === 0) return true;
+
       for (const doc of doctors) {
         for (const cl of doc.clinics || []) {
-          if (cl.clinicId !== clinicId) continue;
+          if (clinicId && cl.clinicId !== clinicId) continue;
           for (const sp of cl.specializations || []) {
-            availableSpecIds.add(sp.specializationId);
+            if (sp.specializationId !== s.id) continue;
+            const docSpecName = specNameById.get(sp.specializationId) || s.name;
+            if (fitsAge(sp.ageFrom, sp.ageTo, docSpecName)) {
+              return true;
+            }
           }
         }
       }
-      list = list.filter((s) => availableSpecIds.has(s.id));
-    }
-
-    return list;
+      return false;
+    });
   }, [allSpecializations, isChild, clinicId, doctors]);
 
   // Filter clinics: only those that have at least one doctor practising a

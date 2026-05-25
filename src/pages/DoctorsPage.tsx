@@ -6,7 +6,12 @@ import { useApi } from "../hooks/useApi";
 import { useBookingStore } from "../store/booking";
 import { useFavoritesStore } from "../store/favorites";
 import { buildConsultPriceMap, getMinPrice } from "../utils/prices";
-import { doctorShowsInMode, isStrictKid, isStrictAdult } from "../utils/ageFilter";
+import {
+  doctorShowsInMode,
+  isStrictKid,
+  isStrictAdult,
+  specNameIsPediatric,
+} from "../utils/ageFilter";
 import DoctorCard from "../components/DoctorCard";
 import PageTransition from "../components/ui/PageTransition";
 import SkeletonList from "../components/ui/SkeletonList";
@@ -235,15 +240,16 @@ export default function DoctorsPage() {
   //    1С "ghost" doctors. We DON'T apply it as a hard requirement to
   //    avoid hiding legitimate doctors when /schedules returns empty.
   {
-    // Filter doctors using strict-signal rules (see utils/ageFilter.ts).
-    // First check the URL-pinned spec's global age — strict kid spec in
-    // adult mode (or vice versa) hides everything immediately.
+    // Filter doctors (see utils/ageFilter.ts).
+    // First check the URL-pinned spec's name + global age — explicit
+    // "Детский ..." / "Педиатр" or strict range hides everything immediately.
     const urlSpec =
       specializationId && specsData
         ? specsData.find((sp) => sp.id === specializationId)
         : undefined;
     let urlSpecBlocks = false;
     if (urlSpec) {
+      if (specNameIsPediatric(urlSpec.name) && !isChild) urlSpecBlocks = true;
       if (isStrictKid(urlSpec.ageFrom, urlSpec.ageTo) && !isChild) urlSpecBlocks = true;
       if (isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo) && isChild) urlSpecBlocks = true;
     }

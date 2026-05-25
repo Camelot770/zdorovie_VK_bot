@@ -57,19 +57,22 @@ export function buildSpecAgeFlags(
   return { specStrictKid, specStrictAdult, specHasAnyEntry };
 }
 
+/** Spec name contains explicit pediatric marker. */
+export function specNameIsPediatric(name: string): boolean {
+  return /детск|педиатр/i.test(name);
+}
+
 /**
  * Whether a Specialization should appear in the current mode.
  *
- * Asymmetric rule because 1С data is mostly wide (0..120):
- *   • Kid mode is STRICT — only show specs with at least one strict kid
- *     signal (ageTo < 18 globally, or under some doctor's entries).
- *   • Adult mode is PERMISSIVE — show everything EXCEPT specs that are
- *     strictly kid (have a kid signal AND no adult signal).
+ * Priority of signals (1С age ranges are unreliable — mostly wide 0..120 —
+ * so the spec name is the strongest signal we have):
  *
- * Without this asymmetry, wide-everywhere data leaks adult specs into kid
- * mode (and pediatric specs into adult mode). The clinic populates kid
- * markers for genuinely pediatric specs; anything without markers we
- * assume is adult-or-mixed.
+ *   1. Spec NAME contains "детск" or "педиатр" → kid-only, no exceptions.
+ *   2. Strict global age range (ageTo < 18 / ageFrom >= 18) → trust it.
+ *   3. Per-spec aggregation across doctor data:
+ *        • Kid mode: STRICT — only show if at least one strict kid signal.
+ *        • Adult mode: PERMISSIVE — show unless strictly kid (kid + no adult).
  */
 export function specShowsInMode(
   spec: Specialization,
@@ -80,21 +83,22 @@ export function specShowsInMode(
   },
   isChild: boolean
 ): boolean {
-  // Strict global age range → trust it absolutely.
+  // 1. Explicit pediatric name wins outright.
+  if (specNameIsPediatric(spec.name)) return isChild;
+
+  // 2. Strict global age range.
   if (isStrictKid(spec.ageFrom, spec.ageTo)) return isChild;
   if (isStrictAdult(spec.ageFrom, spec.ageTo)) return !isChild;
 
-  // Nobody practises this spec → don't show.
+  // 3. Per-spec aggregation.
   if (!flags.specHasAnyEntry.get(spec.id)) return false;
 
   const strictKid = flags.specStrictKid.get(spec.id) === true;
   const strictAdult = flags.specStrictAdult.get(spec.id) === true;
 
   if (isChild) {
-    // Kid mode: only show if at least one strict kid signal exists.
     return strictKid;
   }
-  // Adult mode: hide ONLY if spec is strictly kid (kid signal AND no adult).
   return !(strictKid && !strictAdult);
 }
 

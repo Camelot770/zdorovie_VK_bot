@@ -45,12 +45,12 @@ export function buildSpecAgeFlags(
       for (const sp of cl.specializations || []) {
         const sid = sp.specializationId;
         specHasAnyEntry.set(sid, true);
+        // Signal taken ONLY from the (doctor, clinic, spec) row — not from
+        // the doctor's services. Service-level age ranges are noisy: a
+        // gyn might have a teenage-pregnancy diagnostic service with
+        // ageTo<18, which would falsely flag her as a pediatric doctor.
         if (isStrictKid(sp.ageFrom, sp.ageTo)) specStrictKid.set(sid, true);
         if (isStrictAdult(sp.ageFrom, sp.ageTo)) specStrictAdult.set(sid, true);
-        for (const svc of sp.services || []) {
-          if (isStrictKid(svc.ageFrom, svc.ageTo)) specStrictKid.set(sid, true);
-          if (isStrictAdult(svc.ageFrom, svc.ageTo)) specStrictAdult.set(sid, true);
-        }
       }
     }
   }
@@ -129,12 +129,10 @@ export function doctorShowsInMode(
     for (const sp of cl.specializations || []) {
       if (specializationId && sp.specializationId !== specializationId) continue;
       hasAnyEntry = true;
+      // Signal taken ONLY from the (doctor, clinic, spec) row — see comment
+      // in buildSpecAgeFlags about why service-level ranges are not used.
       if (isStrictKid(sp.ageFrom, sp.ageTo)) hasStrictKid = true;
       if (isStrictAdult(sp.ageFrom, sp.ageTo)) hasStrictAdult = true;
-      for (const svc of sp.services || []) {
-        if (isStrictKid(svc.ageFrom, svc.ageTo)) hasStrictKid = true;
-        if (isStrictAdult(svc.ageFrom, svc.ageTo)) hasStrictAdult = true;
-      }
     }
   }
 

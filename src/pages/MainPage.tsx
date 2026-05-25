@@ -84,16 +84,29 @@ export default function MainPage() {
   const doctors = mainData?.doctors || [];
   const services = mainData?.services || [];
 
-  // Filter specs in two passes:
-  //   1. STRICT by name vs patient age (детск/педиатр → kids, else → adults).
-  //   2. If a clinic is selected — only show specs that actually have at
-  //      least one doctor at that clinic. Otherwise the user can tap a spec
-  //      and land on an empty "Врачи не найдены" screen.
+  // HYBRID mode for age matching:
+  //   - 1С ageFrom/ageTo explicit → use those bounds
+  //   - both blank → fallback by name (детск/педиатр → 0..17, else 18..120)
+  // Plus: if clinic selected, also require at least one doctor at that clinic.
   const specializations = useMemo(() => {
+    const patientAge = isChild ? 10 : 30;
     let list = allSpecializations.filter((s) => {
       if (/узи|узд|ультразв/i.test(s.name)) return false;
-      const specIsChild = /детск|педиатр/i.test(s.name);
-      return specIsChild === isChild;
+      const apiFrom = s.ageFrom;
+      const apiTo = s.ageTo;
+      let from: number;
+      let to: number;
+      if (apiFrom == null && apiTo == null) {
+        if (/детск|педиатр/i.test(s.name)) {
+          from = 0; to = 17;
+        } else {
+          from = 18; to = 120;
+        }
+      } else {
+        from = apiFrom ?? 0;
+        to = apiTo ?? 120;
+      }
+      return patientAge >= from && patientAge <= to;
     });
 
     if (clinicId) {

@@ -102,20 +102,20 @@ export function specShowsInMode(
   if (isStrictKid(spec.ageFrom, spec.ageTo)) return isChild;
   if (isStrictAdult(spec.ageFrom, spec.ageTo)) return !isChild;
 
-  // SAFETY NET: if doctor data is structurally empty (no specs found in
-  // any doctor's clinics — e.g. 1С response format changed or doctors list
-  // hasn't fully hydrated), fall back to permissive: show in adult mode,
-  // hide in kid mode. Better than catastrophically empty spec list.
-  if (flags.specHasAnyEntry.size === 0) return !isChild;
+  // SAFETY NET: if doctor data is structurally empty, show in both modes
+  // (no info — assume open). Better than catastrophically empty list.
+  if (flags.specHasAnyEntry.size === 0) return true;
 
-  // 3. Per-spec aggregation.
+  // 3. Per-spec aggregation — symmetric permissive rule.
   if (!flags.specHasAnyEntry.get(spec.id)) return false;
 
   const strictKid = flags.specStrictKid.get(spec.id) === true;
   const strictAdult = flags.specStrictAdult.get(spec.id) === true;
 
+  // A wide-range spec (0..120 or no info) is considered open to everyone.
+  // We only hide a spec when the data explicitly says "opposite mode only".
   if (isChild) {
-    return strictKid;
+    return !(strictAdult && !strictKid);
   }
   return !(strictKid && !strictAdult);
 }
@@ -161,8 +161,10 @@ export function doctorShowsInMode(
   }
 
   if (!hasAnyEntry) return false;
+  // Symmetric permissive rule: a wide-range doctor (no strict signal) is
+  // open to everyone. We only hide when data explicitly says opposite mode.
   if (isChild) {
-    return hasStrictKid;
+    return !(hasStrictAdult && !hasStrictKid);
   }
   return !(hasStrictKid && !hasStrictAdult);
 }

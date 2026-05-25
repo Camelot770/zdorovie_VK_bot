@@ -6,7 +6,7 @@ import { useApi } from "../hooks/useApi";
 import { useBookingStore } from "../store/booking";
 import { useFavoritesStore } from "../store/favorites";
 import { buildConsultPriceMap, getMinPrice } from "../utils/prices";
-import { rangeOverlapsMode } from "../utils/ageFilter";
+import { doctorShowsInMode, isStrictKid, isStrictAdult } from "../utils/ageFilter";
 import DoctorCard from "../components/DoctorCard";
 import PageTransition from "../components/ui/PageTransition";
 import SkeletonList from "../components/ui/SkeletonList";
@@ -235,34 +235,26 @@ export default function DoctorsPage() {
   //    1С "ghost" doctors. We DON'T apply it as a hard requirement to
   //    avoid hiding legitimate doctors when /schedules returns empty.
   {
-    // Filter doctors purely by 1С age ranges (no names).
-    //   1. If URL pins a specializationId AND that spec's global age range
-    //      doesn't overlap the current mode → no doctors shown.
-    //   2. Otherwise a doctor matches if at least one of their entries under
-    //      the URL-pinned (clinic, spec) has a range overlapping the mode.
+    // Filter doctors using strict-signal rules (see utils/ageFilter.ts).
+    // First check the URL-pinned spec's global age — strict kid spec in
+    // adult mode (or vice versa) hides everything immediately.
     const urlSpec =
       specializationId && specsData
         ? specsData.find((sp) => sp.id === specializationId)
         : undefined;
-    const urlSpecBlocks =
-      urlSpec && !rangeOverlapsMode(urlSpec.ageFrom, urlSpec.ageTo, isChild);
+    let urlSpecBlocks = false;
+    if (urlSpec) {
+      if (isStrictKid(urlSpec.ageFrom, urlSpec.ageTo) && !isChild) urlSpecBlocks = true;
+      if (isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo) && isChild) urlSpecBlocks = true;
+    }
 
-    const doctorMatchesMode = (d: typeof list[number]): boolean => {
-      if (urlSpecBlocks) return false;
-      for (const cl of d.clinics || []) {
-        if (clinicId && cl.clinicId !== clinicId) continue;
-        for (const sp of cl.specializations || []) {
-          if (specializationId && sp.specializationId !== specializationId) continue;
-          if (rangeOverlapsMode(sp.ageFrom, sp.ageTo, isChild)) return true;
-          for (const svc of sp.services || []) {
-            if (rangeOverlapsMode(svc.ageFrom, svc.ageTo, isChild)) return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    list = list.filter(doctorMatchesMode);
+    if (urlSpecBlocks) {
+      list = [];
+    } else {
+      list = list.filter((d) =>
+        doctorShowsInMode(d, clinicId || undefined, specializationId || undefined, isChild)
+      );
+    }
   }
 
   // Bonus filter: when schedules tell us about ghost doctors, prune them.

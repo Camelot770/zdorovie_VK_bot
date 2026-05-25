@@ -1,40 +1,21 @@
-import type { Doctor, Service, Specialization } from "../types";
+import type { Doctor } from "../types";
 
 /**
- * Aggregate per-doctor "kid/adult" flags. A doctor is "kid-friendly" if ANY
- * of these are true across all their (clinic, spec, service) rows:
- *   • service NAME contains "детск/педиатр"
- *   • spec NAME contains "детск/педиатр"
- *   • per-spec or per-service ageTo < 18 (kid age bound)
- * Mirror for "adult-friendly":
- *   • service NAME exists and DOESN'T match kid markers
- *   • per-spec or per-service ageFrom >= 18 (adult lower bound)
+ * Aggregate per-doctor kid/adult flags purely from 1С age ranges (no names).
  *
- * A doctor may end up with BOTH flags (mixed practice — visible in both
- * modes). A doctor with no signal at all defaults to adult so they still
- * show up somewhere.
+ * For every (doctor, clinic, spec) and each of its (service) entries we look
+ * at ageFrom/ageTo. A range overlaps "kid" mode if its lower bound is ≤ 17;
+ * it overlaps "adult" mode if its upper bound is ≥ 18. Undefined bounds
+ * default to 0 / 120 (open-ended).
  *
- * This is intentionally permissive: better to over-show than to hide a
- * legitimate pediatric doctor whose 1С record is sparse.
+ * A doctor may end up with both flags set (mixed practice — visible in both
+ * modes). A doctor with no age data at all defaults to adult so they still
+ * appear somewhere.
  */
-export function buildDoctorAgeFlags(
-  doctors: Doctor[],
-  services: Service[],
-  specializations: Specialization[]
-): {
+export function buildDoctorAgeFlags(doctors: Doctor[]): {
   docHasKid: Map<string, boolean>;
   docHasAdult: Map<string, boolean>;
 } {
-  const serviceIsKid = new Map<string, boolean>();
-  for (const svc of services) {
-    if (!svc.name) continue;
-    serviceIsKid.set(svc.id, /детск|педиатр/i.test(svc.name));
-  }
-  const specIsKidByName = new Map<string, boolean>();
-  for (const sp of specializations) {
-    specIsKidByName.set(sp.id, /детск|педиатр/i.test(sp.name));
-  }
-
   const docHasKid = new Map<string, boolean>();
   const docHasAdult = new Map<string, boolean>();
 
@@ -44,26 +25,22 @@ export function buildDoctorAgeFlags(
 
     for (const cl of doc.clinics || []) {
       for (const sp of cl.specializations || []) {
-        // Spec name signal
-        if (specIsKidByName.get(sp.specializationId)) hasKid = true;
-        // Per-spec age range (only narrow, unambiguous bounds count)
-        if (typeof sp.ageTo === "number" && sp.ageTo < 18) hasKid = true;
-        if (typeof sp.ageFrom === "number" && sp.ageFrom >= 18) hasAdult = true;
+        // Per-(doctor, clinic, spec) range
+        const spLo = sp.ageFrom ?? 0;
+        const spHi = sp.ageTo ?? 120;
+        if (spLo <= 17) hasKid = true;
+        if (spHi >= 18) hasAdult = true;
 
+        // Per-(doctor, clinic, spec, service) range
         for (const svc of sp.services || []) {
-          // Service name signal
-          const kid = serviceIsKid.get(svc.serviceId);
-          if (kid === true) hasKid = true;
-          else if (kid === false) hasAdult = true;
-          // Per-service age range
-          if (typeof svc.ageTo === "number" && svc.ageTo < 18) hasKid = true;
-          if (typeof svc.ageFrom === "number" && svc.ageFrom >= 18) hasAdult = true;
+          const svcLo = svc.ageFrom ?? 0;
+          const svcHi = svc.ageTo ?? 120;
+          if (svcLo <= 17) hasKid = true;
+          if (svcHi >= 18) hasAdult = true;
         }
       }
     }
-    // No signals at all → default to adult.
     if (!hasKid && !hasAdult) hasAdult = true;
-
     docHasKid.set(doc.id, hasKid);
     docHasAdult.set(doc.id, hasAdult);
   }
@@ -71,12 +48,7 @@ export function buildDoctorAgeFlags(
   return { docHasKid, docHasAdult };
 }
 
-/** Quick check: is a spec name an explicit pediatric label like "Детский ..."? */
-export function specNameIsPediatric(name: string): boolean {
-  return /детск|педиатр/i.test(name);
-}
-
-/** Quick check: hide pure ultrasound/diagnostic specs (kept for parity). */
+/** Hide pure ultrasound/diagnostic specs from spec list (not age-related). */
 export function specNameIsUltrasound(name: string): boolean {
   return /узи|узд|ультразв/i.test(name);
 }

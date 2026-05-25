@@ -20,6 +20,8 @@ interface AuthState {
   init: () => Promise<void>;
   setPatientId: (id: string, name?: string) => void;
   resetPatient: () => void;
+  /** Full reset for logout: clears all auth state and re-arms init() to run again. */
+  reset: () => void;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -91,4 +93,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   resetPatient: () =>
     set({ patientId: null, patientName: null }),
+
+  reset: () =>
+    set({
+      loading: true,
+      patientId: null,
+      patientName: null,
+      vkUserId: null,
+      maxUserId: null,
+      _initialized: false,
+      _initializing: false,
+    }),
 }));

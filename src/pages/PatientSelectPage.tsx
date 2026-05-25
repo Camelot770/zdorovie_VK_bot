@@ -43,8 +43,11 @@ export default function PatientSelectPage() {
   // Fetch the doctor + spec list so we can show ALL specs the doctor
   // practises at the current clinic (not just the one auto-picked by the
   // schedule lookup).
-  const { data: doctorData } = useApi<Doctor>(
-    () => (doctorId ? apiGet(`/doctors/${doctorId}`, { include: "specializations" }) : Promise.resolve(null as unknown as Doctor)),
+  const { data: doctorData } = useApi<Doctor | null>(
+    () =>
+      doctorId
+        ? apiGet<Doctor>(`/doctors/${doctorId}`, { include: "specializations" })
+        : Promise.resolve(null),
     [doctorId]
   );
   const { data: specsData } = useApi<Specialization[]>(

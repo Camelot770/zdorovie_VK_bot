@@ -14,9 +14,10 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useAuthStore } from "../store/auth";
 import { useFavoritesStore } from "../store/favorites";
 import { useBookingStore } from "../store/booking";
-import { api } from "../api/client";
+import { api, clearCache } from "../api/client";
 import { getVkUserInfo, requestPhoneNumber } from "../services/vkBridge";
 import { useEffect } from "react";
 import PageTransition from "../components/ui/PageTransition";
@@ -209,8 +210,13 @@ export default function ProfilePage() {
   ];
 
   function handleLogout() {
+    // Wipe everything BEFORE reload — otherwise stale data sticks if the
+    // reload is slow or fails and the next user opens the app on the same device.
     localStorage.removeItem("vk_user_id");
     localStorage.removeItem("fav_doctors");
+    useBookingStore.getState().reset();
+    useAuthStore.getState().reset();
+    clearCache(); // wipe in-memory GET cache (no cross-user leak via cache)
     navigate("/");
     window.location.reload();
   }

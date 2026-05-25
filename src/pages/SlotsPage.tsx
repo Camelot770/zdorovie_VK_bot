@@ -24,8 +24,11 @@ export default function SlotsPage() {
   // Fetch clinic/specialization/doctor names for confirm page display
   const { data: clinicsData } = useApi<Clinic[]>(() => apiGet("/clinics"), []);
   const { data: specsData } = useApi<Specialization[]>(() => apiGet("/specializations"), []);
-  const { data: doctorData } = useApi<Doctor>(
-    () => doctorId ? apiGet(`/doctors/${doctorId}`, { include: "specializations,services" }) : Promise.resolve(null as unknown as Doctor),
+  const { data: doctorData } = useApi<Doctor | null>(
+    () =>
+      doctorId
+        ? apiGet<Doctor>(`/doctors/${doctorId}`, { include: "specializations,services" })
+        : Promise.resolve(null),
     [doctorId]
   );
 

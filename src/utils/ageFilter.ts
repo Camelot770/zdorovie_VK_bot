@@ -75,12 +75,18 @@ export function specNameIsPediatric(name: string): boolean {
 }
 
 /** Spec name implies adult-only practice (no pediatric form exists in real life).
- *  Examples: пластический хирург, акушер-гинеколог, репродуктолог, маммолог,
- *  андролог, геронтолог. These are virtually never available for under-18s.
- *  Note: this only fires when the name doesn't ALSO contain a pediatric marker
- *  (specNameIsPediatric is checked first elsewhere). */
+ *  STRONG markers only — terms that almost never appear in pediatric specs:
+ *    • акушер-гинеколог (gynaecology can be pediatric, but acoucheur cannot)
+ *    • пластический хирург
+ *    • маммолог, репродуктолог, геронтолог, сексолог, нарколог
+ *  We deliberately do NOT include standalone "гинеколог" or "андролог" —
+ *  these often have pediatric forms in clinics (Детский гинеколог /
+ *  Детский уролог-андролог), and a kid doctor may be filed under a
+ *  generically-named spec.
+ *  If the name ALSO contains a pediatric marker, that wins (we return false). */
 export function specNameIsAdultOnly(name: string): boolean {
-  return /пластическ|акушер|гинеколог|андролог|маммолог|репродуктолог|геронтолог|сексолог|нарколог/i.test(name);
+  if (specNameIsPediatric(name)) return false;
+  return /пластическ|акушер|маммолог|репродуктолог|геронтолог|сексолог|нарколог/i.test(name);
 }
 
 /**

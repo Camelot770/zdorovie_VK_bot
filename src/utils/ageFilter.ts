@@ -34,10 +34,16 @@ export function buildSpecAgeFlags(
   specStrictKid: Map<string, boolean>;
   specStrictAdult: Map<string, boolean>;
   specHasAnyEntry: Map<string, boolean>;
+  /** Spec has at least one (doctor, clinic, spec) row with a wide-open range
+   *  (NOT strict-adult AND NOT strict-kid — i.e. 0..120 or undefined).
+   *  Such a row means "this doctor accepts all ages here", which puts the
+   *  spec into BOTH modes regardless of other rows. */
+  specHasOpenRow: Map<string, boolean>;
 } {
   const specStrictKid = new Map<string, boolean>();
   const specStrictAdult = new Map<string, boolean>();
   const specHasAnyEntry = new Map<string, boolean>();
+  const specHasOpenRow = new Map<string, boolean>();
 
   for (const doc of doctors) {
     for (const cl of doc.clinics || []) {
@@ -50,6 +56,7 @@ export function buildSpecAgeFlags(
         const specIsStrictAdult = isStrictAdult(sp.ageFrom, sp.ageTo);
         if (specIsStrictKid) specStrictKid.set(sid, true);
         if (specIsStrictAdult) specStrictAdult.set(sid, true);
+        if (!specIsStrictKid && !specIsStrictAdult) specHasOpenRow.set(sid, true);
 
         // Service-level signals — guarded: a strictly-adult spec
         // (e.g. Акушер-гинеколог with ageFrom>=18) might have one rogue
@@ -66,7 +73,7 @@ export function buildSpecAgeFlags(
       }
     }
   }
-  return { specStrictKid, specStrictAdult, specHasAnyEntry };
+  return { specStrictKid, specStrictAdult, specHasAnyEntry, specHasOpenRow };
 }
 
 /** Spec name contains explicit pediatric marker. */
@@ -107,6 +114,7 @@ export function specShowsInMode(
     specStrictKid: Map<string, boolean>;
     specStrictAdult: Map<string, boolean>;
     specHasAnyEntry: Map<string, boolean>;
+    specHasOpenRow: Map<string, boolean>;
   },
   isChild: boolean
 ): boolean {
@@ -130,13 +138,15 @@ export function specShowsInMode(
 
   const strictKid = flags.specStrictKid.get(spec.id) === true;
   const strictAdult = flags.specStrictAdult.get(spec.id) === true;
+  const hasOpenRow = flags.specHasOpenRow.get(spec.id) === true;
 
-  // A wide-range spec (0..120 or no info) is considered open to everyone.
-  // We only hide a spec when the data explicitly says "opposite mode only".
+  // A wide-range spec (0..120 or no info) is open to everyone — the
+  // presence of ANY open row in the spec puts it into both modes,
+  // even if other rows under it are strict-adult.
   if (isChild) {
-    return !(strictAdult && !strictKid);
+    return strictKid || hasOpenRow;
   }
-  return !(strictKid && !strictAdult);
+  return strictAdult || hasOpenRow;
 }
 
 /**
@@ -154,6 +164,7 @@ export function doctorShowsInMode(
   let hasAnyEntry = false;
   let hasStrictKid = false;
   let hasStrictAdult = false;
+  let hasOpenRow = false;
 
   for (const cl of doctor.clinics || []) {
     if (clinicId && cl.clinicId !== clinicId) continue;
@@ -165,6 +176,7 @@ export function doctorShowsInMode(
       const specIsStrictAdult = isStrictAdult(sp.ageFrom, sp.ageTo);
       if (specIsStrictKid) hasStrictKid = true;
       if (specIsStrictAdult) hasStrictAdult = true;
+      if (!specIsStrictKid && !specIsStrictAdult) hasOpenRow = true;
 
       // Same guard as in buildSpecAgeFlags: service signals are masked
       // if the spec row itself is strictly the opposite mode.
@@ -180,12 +192,12 @@ export function doctorShowsInMode(
   }
 
   if (!hasAnyEntry) return false;
-  // Symmetric permissive rule: a wide-range doctor (no strict signal) is
-  // open to everyone. We only hide when data explicitly says opposite mode.
+  // A doctor with a wide-open row (0..120) accepts all ages — show in
+  // BOTH modes regardless of other rows.
   if (isChild) {
-    return !(hasStrictAdult && !hasStrictKid);
+    return hasStrictKid || hasOpenRow;
   }
-  return !(hasStrictKid && !hasStrictAdult);
+  return hasStrictAdult || hasOpenRow;
 }
 
 /** Hide pure ultrasound/diagnostic specs from spec list (not age-related). */

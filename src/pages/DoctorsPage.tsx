@@ -283,6 +283,18 @@ export default function DoctorsPage() {
     list = list.filter((d) => practisingDoctorIds.has(d.id));
   }
 
+  // Hide doctors who have schedule data but ZERO free slots — pointless to
+  // show them in the booking list. We only apply this when we have schedule
+  // info for the doctor (i.e. they're in practisingDoctorIds); doctors with
+  // NO fetched schedule data are shown by default (uncertain).
+  if (Array.isArray(schedules) && practisingDoctorIds.size > 0) {
+    const doctorsWithFreeSlots = new Set(Object.keys(nearestDateMap));
+    list = list.filter((d) => {
+      if (!practisingDoctorIds.has(d.id)) return true;
+      return doctorsWithFreeSlots.has(d.id);
+    });
+  }
+
   // Filter to favorites if requested
   if (showFavorites) {
     const favIds = new Set(favorites.map((f) => f.id));

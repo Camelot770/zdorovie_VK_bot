@@ -1,12 +1,14 @@
 import type { Doctor, Specialization } from "../types";
 
-/** A "strict kid" range: upper bound strictly below 18 (e.g., 0..17). */
+/** A "strict kid" range: upper bound at or below 18 (e.g., 0..17 OR 0..18).
+ *  This clinic's 1С uses ageTo=18 for pediatric specs (inclusive convention),
+ *  so we treat 18 as the kid boundary. ageTo=999 (or unset) is NOT strict. */
 export function isStrictKid(ageFrom?: number, ageTo?: number): boolean {
   void ageFrom;
-  return typeof ageTo === "number" && ageTo < 18;
+  return typeof ageTo === "number" && ageTo <= 18;
 }
 
-/** A "strict adult" range: lower bound at 18 or above (e.g., 18..99). */
+/** A "strict adult" range: lower bound at 18 or above (e.g., 18..999). */
 export function isStrictAdult(ageFrom?: number, ageTo?: number): boolean {
   void ageTo;
   return typeof ageFrom === "number" && ageFrom >= 18;

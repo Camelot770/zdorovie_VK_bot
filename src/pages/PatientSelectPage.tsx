@@ -17,7 +17,6 @@ import { useBookingStore } from "../store/booking";
 import { useAuth } from "../hooks/useAuth";
 import PageTransition from "../components/ui/PageTransition";
 import { calcAge, ageLabel } from "../utils/age";
-import { specNameIsPediatric, specNameIsAdultOnly } from "../utils/ageFilter";
 import type { Doctor, LinkedPatient, Specialization } from "../types";
 
 /**
@@ -102,14 +101,10 @@ export default function PatientSelectPage() {
       .then((pts) => {
         const list = pts || [];
         setPatients(list);
-        // Eligibility: spec name wins, toggle is fallback. See isPatientEligible() below.
+        // Pure toggle-based — no name heuristics. See isPatientEligible() below.
         const isEligible = (p: LinkedPatient): boolean => {
           const a = calcAge(p.birthDate || "");
           if (a === null) return true;
-          if (specializationName) {
-            if (specNameIsPediatric(specializationName)) return a < 18;
-            if (specNameIsAdultOnly(specializationName)) return a >= 18;
-          }
           if (isChild && a >= 18) return false;
           if (!isChild && a < 18) return false;
           return true;
@@ -144,17 +139,10 @@ export default function PatientSelectPage() {
     }
   }, [appointmentAt, navigate]);
 
-  /** Determine if a patient's age matches the spec / booking mode. */
+  /** Pure toggle-based eligibility — no name heuristics. */
   function isPatientEligible(p: LinkedPatient): boolean {
     const age = calcAge(p.birthDate || "");
     if (age === null) return true; // unknown age — let user decide
-    // 1. Explicit spec-name signal wins over the toggle. "Педиатр" means
-    //    only kids regardless of what the toggle was set to.
-    if (specializationName) {
-      if (specNameIsPediatric(specializationName)) return age < 18;
-      if (specNameIsAdultOnly(specializationName)) return age >= 18;
-    }
-    // 2. Neutral spec — fall back to the booking toggle.
     if (isChild && age >= 18) return false;
     if (!isChild && age < 18) return false;
     return true;

@@ -99,14 +99,13 @@ export function specNameIsAdultOnly(name: string): boolean {
 /**
  * Whether a Specialization should appear in the current mode.
  *
- * Priority of signals (1С age ranges are unreliable — mostly wide 0..120 —
- * so the spec name is the strongest signal we have):
+ * PURE AGE-BASED rule — names are not consulted (per user requirement).
  *
- *   1. Spec NAME contains "детск" or "педиатр" → kid-only, no exceptions.
- *   2. Strict global age range (ageTo < 18 / ageFrom >= 18) → trust it.
- *   3. Per-spec aggregation across doctor data:
- *        • Kid mode: STRICT — only show if at least one strict kid signal.
- *        • Adult mode: PERMISSIVE — show unless strictly kid (kid + no adult).
+ *   1. Strict global age range (ageTo < 18 / ageFrom >= 18) → trust it.
+ *   2. Per-spec aggregation across doctor data (sp + service rows):
+ *        • strictKid OR hasOpenRow → kid mode shows
+ *        • strictAdult OR hasOpenRow → adult mode shows
+ *        • i.e. 0..120 row puts spec into both modes.
  */
 export function specShowsInMode(
   spec: Specialization,
@@ -118,14 +117,7 @@ export function specShowsInMode(
   },
   isChild: boolean
 ): boolean {
-  // 1. Explicit pediatric name wins outright.
-  if (specNameIsPediatric(spec.name)) return isChild;
-
-  // 1b. Explicit adult-only name (Акушер-гинеколог, Пластический хирург,
-  // Маммолог, …) — hide from kid mode regardless of data.
-  if (specNameIsAdultOnly(spec.name)) return !isChild;
-
-  // 2. Strict global age range.
+  // 1. Strict global age range — trust it.
   if (isStrictKid(spec.ageFrom, spec.ageTo)) return isChild;
   if (isStrictAdult(spec.ageFrom, spec.ageTo)) return !isChild;
 

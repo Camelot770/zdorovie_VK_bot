@@ -6,13 +6,7 @@ import { useApi } from "../hooks/useApi";
 import { useBookingStore } from "../store/booking";
 import { useFavoritesStore } from "../store/favorites";
 import { buildConsultPriceMap, getMinPrice } from "../utils/prices";
-import {
-  doctorShowsInMode,
-  isStrictKid,
-  isStrictAdult,
-  specNameIsPediatric,
-  specNameIsAdultOnly,
-} from "../utils/ageFilter";
+import { doctorShowsInMode, isStrictKid, isStrictAdult } from "../utils/ageFilter";
 import DoctorCard from "../components/DoctorCard";
 import PageTransition from "../components/ui/PageTransition";
 import SkeletonList from "../components/ui/SkeletonList";
@@ -247,12 +241,9 @@ export default function DoctorsPage() {
       specializationId && specsData
         ? specsData.find((sp) => sp.id === specializationId)
         : undefined;
-    const urlSpecIsKid =
-      urlSpec &&
-      (specNameIsPediatric(urlSpec.name) || isStrictKid(urlSpec.ageFrom, urlSpec.ageTo));
-    const urlSpecIsAdult =
-      urlSpec &&
-      (specNameIsAdultOnly(urlSpec.name) || isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo));
+    // Pure age-based — no name signals.
+    const urlSpecIsKid = urlSpec && isStrictKid(urlSpec.ageFrom, urlSpec.ageTo);
+    const urlSpecIsAdult = urlSpec && isStrictAdult(urlSpec.ageFrom, urlSpec.ageTo);
 
     // Mode mismatch with the URL spec → empty list.
     if ((urlSpecIsKid && !isChild) || (urlSpecIsAdult && isChild)) {

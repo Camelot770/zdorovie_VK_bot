@@ -88,11 +88,15 @@ export default function PatientSelectPage() {
   const [regPhone, setRegPhone] = useState("");
   const [registering, setRegistering] = useState(false);
 
-  // Run ONCE — never override user's manual selection on re-render
-  const fetchedRef = useRef(false);
+  // Refetch when (user, mode) changes. Keep a per-combination memo so we
+  // don't refetch repeatedly for the same maxUserId+isChild — but a toggle
+  // from kid↔adult MUST trigger a reload because eligibility rules differ.
+  const lastFetchKeyRef = useRef("");
   useEffect(() => {
-    if (!maxUserId || fetchedRef.current) return;
-    fetchedRef.current = true;
+    if (!maxUserId) return;
+    const fetchKey = `${maxUserId}|${isChild ? "1" : "0"}`;
+    if (lastFetchKeyRef.current === fetchKey) return;
+    lastFetchKeyRef.current = fetchKey;
     setLoading(true);
     apiGetFresh<LinkedPatient[]>(`/auth/patients/${maxUserId}`, { source: "vk" })
       .then((pts) => {

@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://zdorov-e-sem-i-camelot770.amvera.io/api/:path*"
+      "destination": "https://zdorov-e-sem-i-camelot770.msk1.amvera.tech/api/:path*"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

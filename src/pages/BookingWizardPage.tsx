@@ -23,6 +23,7 @@ import { collectServiceIds, buildConsultPriceMap, getMinPrice, findBestConsultSe
 import Calendar from "../components/Calendar";
 import TimeSlots from "../components/TimeSlots";
 import Avatar from "../components/ui/Avatar";
+import DmsBadge from "../components/DmsBadge";
 import SkeletonCard from "../components/ui/SkeletonCard";
 import PageTransition from "../components/ui/PageTransition";
 import type {
@@ -937,6 +938,7 @@ export default function BookingWizardPage() {
                       {price.toLocaleString("ru-RU")} ₽
                     </span>
                   )}
+                  <DmsBadge dms={doctor.dms} />
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />

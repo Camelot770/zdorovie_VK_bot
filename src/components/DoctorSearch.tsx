@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from "react";
+import DmsBadge from "./DmsBadge";
 import { Search, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { apiGet } from "../api/client";
@@ -132,7 +133,8 @@ export default function DoctorSearch({
                     }}
                   >
                     <Avatar name={name} size="sm" />
-                    <span className="text-sm text-gray-900">{name}</span>
+                    <span className="text-sm text-gray-900 flex-1 min-w-0">{name}</span>
+                    <DmsBadge dms={doc.dms} />
                   </li>
                 );
               })

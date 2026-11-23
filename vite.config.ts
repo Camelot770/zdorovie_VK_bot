@@ -13,7 +13,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "https://zdorov-e-sem-i-camelot770.amvera.io",
+        target: "https://zdorov-e-sem-i-camelot770.msk1.amvera.tech",
         changeOrigin: true,
       },
     },

@@ -1,6 +1,7 @@
-import { Briefcase, MapPin, Calendar, ArrowRight, Heart, Shield, Banknote } from "lucide-react";
+import { Briefcase, MapPin, Calendar, ArrowRight, Heart, Banknote } from "lucide-react";
 import Avatar from "./ui/Avatar";
 import Badge from "./ui/Badge";
+import DmsBadge from "./DmsBadge";
 import { useFavoritesStore } from "../store/favorites";
 import type { Doctor } from "../types";
 
@@ -63,12 +64,7 @@ export default function DoctorCard({
             {specializationName && (
               <Badge variant="neutral">{specializationName}</Badge>
             )}
-            {doctor.dms && (
-              <Badge variant="success">
-                <Shield className="w-3 h-3 mr-0.5" />
-                ДМС
-              </Badge>
-            )}
+            <DmsBadge dms={doctor.dms} />
           </div>
           <div className="mt-2.5 space-y-1">
             {doctor.experience != null && (
